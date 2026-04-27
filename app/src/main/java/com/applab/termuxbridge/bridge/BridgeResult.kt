@@ -14,9 +14,29 @@ data class BridgeResult(
     val reportFile: String? = null,
     val logFile: String? = null,
     val nextAction: String? = null,
-    val artifacts: List<String> = emptyList()
+    val artifacts: List<String> = emptyList(),
+    val repoPath: String? = null,
+    val repoName: String? = null,
+    val branch: String? = null,
+    val dirty: Boolean? = null,
+    val changedFiles: Int? = null,
+    val ahead: Int? = null,
+    val behind: Int? = null
 ) {
     val isLoaded: Boolean get() = runId.isNotBlank()
+
+    val repoLabel: String
+        get() = listOfNotNull(repoName, branch).joinToString(" · ").ifBlank { "No repo loaded" }
+
+    val stateLabel: String
+        get() = when {
+            dirty == true -> "changed${changedFiles?.let { " · $it file(s)" } ?: ""}"
+            ahead != null && ahead > 0 && behind != null && behind > 0 -> "diverged"
+            ahead != null && ahead > 0 -> "ahead $ahead"
+            behind != null && behind > 0 -> "behind $behind"
+            dirty == false -> "clean"
+            else -> "unknown"
+        }
 
     fun reportFileName(): String {
         val explicit = reportFile?.substringAfterLast('/')?.substringAfterLast(File.separatorChar)?.takeIf { it.isNotBlank() }
@@ -64,7 +84,14 @@ data class BridgeResult(
                     reportFile = json.optNullableString("report_file"),
                     logFile = json.optNullableString("log_file"),
                     nextAction = json.optNullableString("next_action"),
-                    artifacts = artifacts
+                    artifacts = artifacts,
+                    repoPath = json.optNullableString("repo_path"),
+                    repoName = json.optNullableString("repo_name"),
+                    branch = json.optNullableString("branch"),
+                    dirty = json.optNullableBoolean("dirty"),
+                    changedFiles = json.optNullableInt("changed_files"),
+                    ahead = json.optNullableInt("ahead"),
+                    behind = json.optNullableInt("behind")
                 )
             } catch (error: Exception) {
                 invalidJson(error.message ?: "Could not parse latest_result.json")
@@ -76,4 +103,14 @@ data class BridgeResult(
 private fun JSONObject.optNullableString(name: String): String? {
     if (!has(name) || isNull(name)) return null
     return optString(name).takeIf { it.isNotBlank() && it != "null" }
+}
+
+private fun JSONObject.optNullableBoolean(name: String): Boolean? {
+    if (!has(name) || isNull(name)) return null
+    return optBoolean(name)
+}
+
+private fun JSONObject.optNullableInt(name: String): Int? {
+    if (!has(name) || isNull(name)) return null
+    return optInt(name)
 }
