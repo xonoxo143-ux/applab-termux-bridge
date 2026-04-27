@@ -23,23 +23,22 @@ LIB_DIR="$HOME_DIR/.termux/applab/lib"
 
 mkdir -p "$RESULTS_DIR" "$RESULT_HISTORY_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR" "$APKS_DIR" "$HOME_DIR/.termux/applab" "$LIB_DIR"
 
-# Prefer live helper files copied by update_dispatcher. Fall back to repo helper files when running from the repo.
-if [ -f "$LIB_DIR/repo_state.sh" ]; then
-  . "$LIB_DIR/repo_state.sh"
-elif [ -f "$BRIDGE_LOCAL_DIR/termux/applab/lib/repo_state.sh" ]; then
-  . "$BRIDGE_LOCAL_DIR/termux/applab/lib/repo_state.sh"
-else
-  repo_json_fields() { printf '{}'; }
-fi
+source_helper() {
+  HELPER_NAME="$1"
+  if [ -f "$LIB_DIR/$HELPER_NAME" ]; then
+    . "$LIB_DIR/$HELPER_NAME"
+  elif [ -f "$BRIDGE_LOCAL_DIR/termux/applab/lib/$HELPER_NAME" ]; then
+    . "$BRIDGE_LOCAL_DIR/termux/applab/lib/$HELPER_NAME"
+  else
+    return 1
+  fi
+}
 
-if [ -f "$LIB_DIR/result_writer.sh" ]; then
-  . "$LIB_DIR/result_writer.sh"
-elif [ -f "$BRIDGE_LOCAL_DIR/termux/applab/lib/result_writer.sh" ]; then
-  . "$BRIDGE_LOCAL_DIR/termux/applab/lib/result_writer.sh"
-else
-  write_result() { echo "Result writer missing" >&2; exit 1; }
-  run_report() { echo "Result writer missing" >&2; exit 1; }
-fi
+source_helper repo_state.sh || repo_json_fields() { printf '{}'; }
+source_helper result_writer.sh || { write_result() { echo "Result writer missing" >&2; exit 1; }; run_report() { echo "Result writer missing" >&2; exit 1; }; }
+source_helper apk_actions.sh || true
+source_helper utility_actions.sh || true
+source_helper parked_actions.sh || true
 
 active_repo() {
   if [ -f "$CONFIG_DIR/active_repo.txt" ]; then
@@ -63,6 +62,10 @@ need_repo() {
 latest_bridge_run_id() {
   gh run list --repo "$BRIDGE_REPO" --workflow "$BRIDGE_WORKFLOW" --status success --limit 1 --json databaseId --jq '.[0].databaseId'
 }
+
+if command -v handle_utility_action >/dev/null 2>&1; then handle_utility_action || true; fi
+if command -v handle_apk_action >/dev/null 2>&1; then handle_apk_action || true; fi
+if command -v handle_parked_action >/dev/null 2>&1; then handle_parked_action || true; fi
 
 case "$ACTION" in
   check_setup)
