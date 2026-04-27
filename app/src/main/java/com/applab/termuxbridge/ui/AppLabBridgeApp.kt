@@ -83,10 +83,21 @@ fun AppLabBridgeApp() {
     var pollingToken by remember { mutableStateOf(0) }
     var previousRunId by remember { mutableStateOf(latestResult.runId) }
     var currentScreen by remember { mutableStateOf(AppScreen.HOME) }
+    var pendingAction by remember { mutableStateOf<BridgeAction?>(null) }
 
-    fun runAction(action: BridgeAction) {
+    fun executeAction(action: BridgeAction) {
+        pendingAction = null
         statusText = termuxRunner.run(action).message
         pollingToken += 1
+    }
+
+    fun requestAction(action: BridgeAction) {
+        if (requiresConfirmation(action)) {
+            pendingAction = action
+            statusText = "Confirm ${action.label} before running."
+        } else {
+            executeAction(action)
+        }
     }
 
     fun refreshResult() {
@@ -152,22 +163,33 @@ fun AppLabBridgeApp() {
                     onScreenSelected = { currentScreen = it }
                 )
                 StatusPanel(statusText, treeUri, latestResult)
+                pendingAction?.let { action ->
+                    ConfirmActionCard(
+                        action = action,
+                        latestResult = latestResult,
+                        onConfirm = { executeAction(action) },
+                        onCancel = {
+                            pendingAction = null
+                            statusText = "Action cancelled."
+                        }
+                    )
+                }
                 when (currentScreen) {
                     AppScreen.HOME -> HomeScreen(
                         treeUri = treeUri,
                         latestResult = latestResult,
                         onPickFolder = { folderPicker.launch(null) },
                         onRefresh = ::refreshResult,
-                        onRunAction = ::runAction,
+                        onRunAction = ::requestAction,
                         onOpenReport = openReport,
                         onOpenLog = openLog,
                         onGoTo = { currentScreen = it }
                     )
-                    AppScreen.REPO -> RepoWorkbenchScreen(onRunAction = ::runAction)
-                    AppScreen.PATCH -> PatchRunnerScreen(onRunAction = ::runAction)
+                    AppScreen.REPO -> RepoWorkbenchScreen(onRunAction = ::requestAction)
+                    AppScreen.PATCH -> PatchRunnerScreen(onRunAction = ::requestAction)
                     AppScreen.APK -> ApkScreen(
                         latestApkName = apkInstaller.latestApkName(treeUri),
-                        onRunAction = ::runAction,
+                        onRunAction = ::requestAction,
                         onInstall = { statusText = apkInstaller.installLatest(treeUri).message },
                         onInstallSettings = { apkInstaller.openInstallSettings() }
                     )
@@ -181,7 +203,7 @@ fun AppLabBridgeApp() {
                     AppScreen.SETUP -> SetupScreen(
                         onPickFolder = { folderPicker.launch(null) },
                         onRefresh = ::refreshResult,
-                        onRunAction = ::runAction,
+                        onRunAction = ::requestAction,
                         onOpenSettings = { openAppSettings(context) },
                         onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message }
                     )
@@ -264,6 +286,36 @@ private fun StatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
                 color = statusColor(result.status),
                 style = MaterialTheme.typography.bodyMedium
             )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmActionCard(
+    action: BridgeAction,
+    latestResult: BridgeResult,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1A08)),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Confirm Action", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(action.label, color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
+            HintText(actionRiskText(action))
+            StatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
+            StatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
+            StatusLine("State", latestResult.stateLabel, latestResult.dirty == false)
+            Button(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB86814)),
+                onClick = onConfirm
+            ) {
+                Text("Confirm ${action.label}")
+            }
+            SecondaryButton("Cancel", onCancel)
         }
     }
 }
@@ -473,8 +525,9 @@ private fun SetupScreen(
     }
     SectionCard("Termux Setup") {
         ActionButton(BridgeAction.CHECK_SETUP, onRunAction)
+        ActionButton(BridgeAction.UPDATE_DISPATCHER, onRunAction, tone = ActionTone.WARNING)
         SecondaryButton("Open App Permission Settings", onOpenSettings)
-        HintText("Required: Termux storage access, allow-external-apps=true, and Android permission for this app to run Termux commands.")
+        HintText("Required: Termux storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
     }
     SectionCard("Parked Tools") {
         SecondaryButton("Write Clipboard to Inbox", onClipboard)
@@ -621,6 +674,9 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
     if (result.action == "download_latest_apk") {
         return RecommendedAction("Install the downloaded APK", "The latest APK should now be in the bridge folder. Install it from Build / APK.", "Open Build / APK", screen = AppScreen.APK)
     }
+    if (result.action == "update_dispatcher") {
+        return RecommendedAction("Check setup again", "The dispatcher was updated. Verify the backend before running more actions.", BridgeAction.CHECK_SETUP.label, BridgeAction.CHECK_SETUP)
+    }
     if (result.dirty == true && result.action == "show_status") {
         return RecommendedAction("Review the diff", "The active repo has changed files. Review before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
     }
@@ -638,6 +694,32 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
         "commit_no_apk" -> RecommendedAction("Push current branch", "A commit was created. Push it when ready.", BridgeAction.PUSH_CURRENT.label, BridgeAction.PUSH_CURRENT, tone = ActionTone.WARNING)
         "push_current" -> RecommendedAction("Refresh status", "Push completed. Refresh the active repo status.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
         else -> RecommendedAction("Refresh status", "Start by checking the active repo state.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
+    }
+}
+
+private fun requiresConfirmation(action: BridgeAction): Boolean {
+    return action in setOf(
+        BridgeAction.UPDATE_DISPATCHER,
+        BridgeAction.PULL_STAGING,
+        BridgeAction.CHECKOUT_STAGING,
+        BridgeAction.RUN_PATCH_SCRIPT,
+        BridgeAction.STAGE_ALL,
+        BridgeAction.COMMIT_NO_APK,
+        BridgeAction.PUSH_CURRENT,
+        BridgeAction.DOWNLOAD_LATEST_APK
+    )
+}
+
+private fun actionRiskText(action: BridgeAction): String {
+    return when (action) {
+        BridgeAction.UPDATE_DISPATCHER -> "Updates the live Termux dispatcher from the bridge repo. This changes backend behavior without installing a new APK."
+        BridgeAction.PULL_STAGING, BridgeAction.CHECKOUT_STAGING -> "Changes the active repo branch. Use on a clean working tree."
+        BridgeAction.RUN_PATCH_SCRIPT -> "Runs patches/patch.sh against the active repo. Review repo and branch before confirming."
+        BridgeAction.STAGE_ALL -> "Stages every changed file in the active repo. Review the diff first."
+        BridgeAction.COMMIT_NO_APK -> "Creates a local commit. The backend appends [no apk] when needed."
+        BridgeAction.PUSH_CURRENT -> "Pushes the current branch to GitHub. Confirm the branch and commit first."
+        BridgeAction.DOWNLOAD_LATEST_APK -> "Downloads the latest GitHub debug APK artifact into the bridge folder. Install remains a separate Android confirmation."
+        else -> "This action changes repo or backend state. Confirm before running."
     }
 }
 
