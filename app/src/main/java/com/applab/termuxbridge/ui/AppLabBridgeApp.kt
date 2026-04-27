@@ -10,10 +10,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -43,7 +41,6 @@ import com.applab.termuxbridge.apk.ApkInstaller
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
 import com.applab.termuxbridge.bridge.BridgeResultReader
-import com.applab.termuxbridge.bridge.BridgeSection
 import com.applab.termuxbridge.bridge.TermuxRunner
 import com.applab.termuxbridge.clipboard.ClipboardBridge
 import com.applab.termuxbridge.storage.SafBridgeFolder
@@ -65,6 +62,12 @@ fun AppLabBridgeApp() {
     var statusText by remember { mutableStateOf("Ready") }
     var pollingToken by remember { mutableStateOf(0) }
     var previousRunId by remember { mutableStateOf(latestResult.runId) }
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    fun runAction(action: BridgeAction) {
+        statusText = termuxRunner.run(action).message
+        pollingToken += 1
+    }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -95,7 +98,7 @@ fun AppLabBridgeApp() {
                 return@LaunchedEffect
             }
         }
-        statusText = "No new result detected yet. Refresh manually or check Termux."
+        statusText = "No new result detected. Open Termux or refresh the result."
     }
 
     MaterialTheme {
@@ -118,40 +121,15 @@ fun AppLabBridgeApp() {
                     }
                 )
                 SetupCard(
-                    onRunAction = { action ->
-                        statusText = termuxRunner.run(action).message
-                        pollingToken += 1
-                    },
+                    onRunAction = ::runAction,
                     onOpenSettings = { openAppSettings(context) }
                 )
-                ActionSection(BridgeSection.REPO) { action ->
-                    statusText = termuxRunner.run(action).message
-                    pollingToken += 1
-                }
-                ApkSection(
+                GitWorkbenchCard(onRunAction = ::runAction)
+                LocalApkCard(
                     latestApkName = apkInstaller.latestApkName(treeUri),
-                    onRunAction = { action ->
-                        statusText = termuxRunner.run(action).message
-                        pollingToken += 1
-                    },
                     onInstall = { statusText = apkInstaller.installLatest(treeUri).message },
                     onInstallSettings = { apkInstaller.openInstallSettings() }
                 )
-                SaveSection(
-                    onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message },
-                    onRunAction = { action ->
-                        statusText = termuxRunner.run(action).message
-                        pollingToken += 1
-                    }
-                )
-                ActionSection(BridgeSection.AUDIT) { action ->
-                    statusText = termuxRunner.run(action).message
-                    pollingToken += 1
-                }
-                ActionSection(BridgeSection.DEBUG) { action ->
-                    statusText = termuxRunner.run(action).message
-                    pollingToken += 1
-                }
                 LatestResultCard(
                     result = latestResult,
                     onOpenReport = {
@@ -164,6 +142,11 @@ fun AppLabBridgeApp() {
                         statusText = if (fileOpener.openDebugZip(treeUri)) "Debug zip opened." else "Debug zip not found."
                     }
                 )
+                AdvancedCard(
+                    expanded = showAdvanced,
+                    onToggle = { showAdvanced = !showAdvanced },
+                    onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message }
+                )
             }
         }
     }
@@ -173,13 +156,13 @@ fun AppLabBridgeApp() {
 private fun Header() {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = "AppLab Termux Bridge",
+            text = "AppLab Bridge",
             color = Color.White,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Button cockpit for approved Termux-backed workflows.",
+            text = "Phone Git cockpit for approved Termux workflows.",
             color = Color(0xFF9AA4B2),
             style = MaterialTheme.typography.bodyMedium
         )
@@ -188,17 +171,14 @@ private fun Header() {
 
 @Composable
 private fun StatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
+    val folderText = if (treeUri == null) "Folder: not selected" else "Folder: Documents/AppLabBridge selected"
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101821)),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(status, color = Color.White, fontWeight = FontWeight.Bold)
-            Text(
-                text = "Folder: ${treeUri?.toString() ?: "not selected"}",
-                color = Color(0xFF9AA4B2),
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(folderText, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
             Text(
                 text = "Last: ${result.status.uppercase()} — ${result.title}",
                 color = statusColor(result.status),
@@ -211,15 +191,9 @@ private fun StatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
 @Composable
 private fun BridgeFolderCard(onPickFolder: () -> Unit, onRefresh: () -> Unit) {
     SectionCard("Bridge Folder") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Pick Folder", onPickFolder)
-            SecondaryButton("Refresh Result", onRefresh)
-        }
-        Text(
-            text = "Recommended: Documents/AppLabBridge. Termux should use ~/storage/shared/Documents/AppLabBridge.",
-            color = Color(0xFF9AA4B2),
-            style = MaterialTheme.typography.bodySmall
-        )
+        PrimaryButton("Pick Documents/AppLabBridge", onPickFolder)
+        SecondaryButton("Refresh Latest Result", onRefresh)
+        HintText("Use the same folder Termux writes to: ~/storage/shared/Documents/AppLabBridge.")
     }
 }
 
@@ -228,50 +202,72 @@ private fun SetupCard(onRunAction: (BridgeAction) -> Unit, onOpenSettings: () ->
     SectionCard("Setup") {
         ActionButton(BridgeAction.CHECK_SETUP, onRunAction)
         SecondaryButton("Open App Permission Settings", onOpenSettings)
-        Text(
-            text = "Setup checklist: install script pack, run termux-setup-storage, set allow-external-apps=true, grant this app Termux command permission, then pick Documents/AppLabBridge.",
-            color = Color(0xFF9AA4B2),
-            style = MaterialTheme.typography.bodySmall
+        HintText("Needed once: Termux storage, allow-external-apps, and Android permission for this app to run Termux commands.")
+    }
+}
+
+@Composable
+private fun GitWorkbenchCard(onRunAction: (BridgeAction) -> Unit) {
+    SectionCard("Git Workbench") {
+        ActionGroup(
+            title = "Repo",
+            actions = listOf(
+                BridgeAction.LIST_PROJECTS,
+                BridgeAction.SHOW_ACTIVE_REPO,
+                BridgeAction.SET_ACTIVE_BRIDGE,
+                BridgeAction.SET_ACTIVE_LIBRESEED
+            ),
+            onRunAction = onRunAction
+        )
+        ActionGroup(
+            title = "Inspect",
+            actions = listOf(
+                BridgeAction.SHOW_STATUS,
+                BridgeAction.SHOW_CURRENT_COMMIT,
+                BridgeAction.SHOW_BRANCHES,
+                BridgeAction.LIST_CHANGED_FILES,
+                BridgeAction.SHOW_DIFF_SUMMARY
+            ),
+            onRunAction = onRunAction
+        )
+        ActionGroup(
+            title = "Update",
+            actions = listOf(
+                BridgeAction.PULL_CURRENT,
+                BridgeAction.PULL_STAGING,
+                BridgeAction.CHECKOUT_STAGING,
+                BridgeAction.FETCH_REPO
+            ),
+            onRunAction = onRunAction
+        )
+        ActionGroup(
+            title = "Patch / Publish",
+            actions = listOf(
+                BridgeAction.RUN_PATCH_SCRIPT,
+                BridgeAction.STAGE_ALL,
+                BridgeAction.COMMIT_NO_APK,
+                BridgeAction.PUSH_CURRENT
+            ),
+            onRunAction = onRunAction
         )
     }
 }
 
 @Composable
-private fun ActionSection(section: BridgeSection, onRunAction: (BridgeAction) -> Unit) {
-    SectionCard(section.title) {
-        ActionGrid(BridgeAction.forSection(section), onRunAction)
-    }
-}
-
-@Composable
-private fun ApkSection(
+private fun LocalApkCard(
     latestApkName: String?,
-    onRunAction: (BridgeAction) -> Unit,
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    SectionCard("APK") {
-        ActionGrid(listOf(BridgeAction.CHECK_LATEST_APK, BridgeAction.DOWNLOAD_LATEST_APK), onRunAction)
+    SectionCard("Local APK") {
         Text(
             text = "Latest local APK: ${latestApkName ?: "none found"}",
             color = Color(0xFF9AA4B2),
             style = MaterialTheme.typography.bodySmall
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton("Install Latest APK", onInstall)
-            SecondaryButton("Open Install Settings", onInstallSettings)
-        }
-    }
-}
-
-@Composable
-private fun SaveSection(onClipboard: () -> Unit, onRunAction: (BridgeAction) -> Unit) {
-    SectionCard("Save Codes") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            SecondaryButton("Write Clipboard to Inbox", onClipboard)
-            ActionButton(BridgeAction.DECODE_SAVE, onRunAction)
-        }
-        ActionButton(BridgeAction.VALIDATE_SAVE, onRunAction)
+        SecondaryButton("Install Latest Local APK", onInstall)
+        SecondaryButton("Open Install Settings", onInstallSettings)
+        HintText("APK download is parked. Put an APK in the bridge folder or download it from GitHub first.")
     }
 }
 
@@ -284,11 +280,40 @@ private fun LatestResultCard(
 ) {
     SectionCard("Latest Result") {
         ResultBlock(result)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton("Open Report", onOpenReport)
-            SecondaryButton("Open Latest Log", onOpenLog)
-        }
+        SecondaryButton("Open Report", onOpenReport)
+        SecondaryButton("Open Latest Log", onOpenLog)
         SecondaryButton("Open Latest Debug Zip", onOpenDebugZip)
+    }
+}
+
+@Composable
+private fun AdvancedCard(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onClipboard: () -> Unit
+) {
+    SectionCard("Advanced / Parked") {
+        SecondaryButton(if (expanded) "Hide Parked Tools" else "Show Parked Tools", onToggle)
+        if (expanded) {
+            SecondaryButton("Write Clipboard to Inbox", onClipboard)
+            HintText("Save-code, source-audit, APK download, and debug bundle buttons are parked until the backend supports them cleanly.")
+        } else {
+            HintText("Only working Git cockpit actions are shown by default.")
+        }
+    }
+}
+
+@Composable
+private fun ActionGroup(
+    title: String,
+    actions: List<BridgeAction>,
+    onRunAction: (BridgeAction) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, color = Color(0xFFC7D0DA), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        actions.forEach { action ->
+            ActionButton(action, onRunAction)
+        }
     }
 }
 
@@ -307,23 +332,9 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 }
 
 @Composable
-private fun ActionGrid(actions: List<BridgeAction>, onRunAction: (BridgeAction) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        actions.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                row.forEach { action ->
-                    ActionButton(action, onRunAction, Modifier.weight(1f))
-                }
-                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
 private fun ActionButton(action: BridgeAction, onRunAction: (BridgeAction) -> Unit, modifier: Modifier = Modifier) {
     Button(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
         onClick = { onRunAction(action) }
     ) {
@@ -333,16 +344,28 @@ private fun ActionButton(action: BridgeAction, onRunAction: (BridgeAction) -> Un
 
 @Composable
 private fun PrimaryButton(label: String, onClick: () -> Unit) {
-    Button(colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)), onClick = onClick) {
+    Button(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+        onClick = onClick
+    ) {
         Text(label)
     }
 }
 
 @Composable
 private fun SecondaryButton(label: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick) {
+    OutlinedButton(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        onClick = onClick
+    ) {
         Text(label, color = Color.White)
     }
+}
+
+@Composable
+private fun HintText(text: String) {
+    Text(text = text, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
