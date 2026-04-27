@@ -4,6 +4,25 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val buildNumber = providers.environmentVariable("GITHUB_RUN_NUMBER")
+    .map { it.toIntOrNull() ?: 1 }
+    .orElse(1)
+    .get()
+val buildName = providers.environmentVariable("GITHUB_RUN_NUMBER")
+    .orElse("local")
+    .get()
+
+val signingKeystore = providers.environmentVariable("APPLAB_SIGNING_KEYSTORE").orNull
+val signingStorePassword = providers.environmentVariable("APPLAB_SIGNING_STORE_PASSWORD").orNull
+val signingKeyAlias = providers.environmentVariable("APPLAB_SIGNING_KEY_ALIAS").orNull
+val signingKeyPassword = providers.environmentVariable("APPLAB_SIGNING_KEY_PASSWORD").orNull
+val hasApplabSigning = listOf(
+    signingKeystore,
+    signingStorePassword,
+    signingKeyAlias,
+    signingKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.applab.termuxbridge"
     compileSdk = 35
@@ -12,12 +31,31 @@ android {
         applicationId = "com.applab.termuxbridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 1000 + buildNumber
+        versionName = "0.1.$buildName"
+    }
+
+    signingConfigs {
+        if (hasApplabSigning) {
+            create("applabDev") {
+                storeFile = file(signingKeystore!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            if (hasApplabSigning) {
+                signingConfig = signingConfigs.getByName("applabDev")
+            }
+        }
         release {
+            if (hasApplabSigning) {
+                signingConfig = signingConfigs.getByName("applabDev")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
