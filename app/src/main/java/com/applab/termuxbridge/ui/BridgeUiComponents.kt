@@ -32,7 +32,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.applab.termuxbridge.bridge.BridgeAction
+import com.applab.termuxbridge.bridge.BridgeCommandPhase
+import com.applab.termuxbridge.bridge.BridgePendingCommand
 import com.applab.termuxbridge.bridge.BridgeResult
+import com.applab.termuxbridge.bridge.userLabel
 
 @Composable
 fun BridgeAppHeader(
@@ -91,7 +94,12 @@ fun BridgeAppHeader(
 }
 
 @Composable
-fun BridgeStatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
+fun BridgeStatusPanel(
+    status: String,
+    treeUri: Uri?,
+    result: BridgeResult,
+    pendingCommand: BridgePendingCommand?
+) {
     val folderText = if (treeUri == null) "Folder: not selected" else "Folder: Documents/AppLabBridge selected"
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101821)),
@@ -99,6 +107,21 @@ fun BridgeStatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(status, color = Color.White, fontWeight = FontWeight.Bold)
+            pendingCommand?.let { command ->
+                Text(
+                    text = "Command: ${command.action.id} · ${command.phase.userLabel()}",
+                    color = commandPhaseColor(command.phase),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace
+                )
+                if (command.phase == BridgeCommandPhase.TIMED_OUT) {
+                    Text(
+                        text = "Likely causes: Termux permission blocked, dispatcher failed before JSON, or selected folder mismatch.",
+                        color = Color(0xFFFFD166),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
             Text(folderText, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
             Text(result.repoLabel, color = bridgeRepoStateColor(result), style = MaterialTheme.typography.bodyMedium)
             Text(result.stateLabel, color = bridgeRepoStateColor(result), style = MaterialTheme.typography.bodySmall)
@@ -219,6 +242,9 @@ fun BridgeResultBlock(result: BridgeResult) {
     ) {
         Text(result.title, color = Color.White, fontWeight = FontWeight.Bold)
         Text(result.summary, color = Color(0xFFC7D0DA))
+        result.diagnosticHint?.takeIf { it.isNotBlank() }?.let { hint ->
+            Text("Hint: $hint", color = Color(0xFFFFD166), fontFamily = FontFamily.Monospace)
+        }
         Text("Repo: ${result.repoLabel}", color = bridgeRepoStateColor(result), fontFamily = FontFamily.Monospace)
         Text("State: ${result.stateLabel}", color = bridgeRepoStateColor(result), fontFamily = FontFamily.Monospace)
         Text("Changes: ${result.changeBreakdownLabel}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
@@ -248,5 +274,13 @@ fun BridgeActionGroup(
         actions.forEach { action ->
             BridgeActionButton(action, onRunAction)
         }
+    }
+}
+
+private fun commandPhaseColor(phase: BridgeCommandPhase): Color {
+    return when (phase) {
+        BridgeCommandPhase.RESULT_RECEIVED -> Color(0xFF5CE38A)
+        BridgeCommandPhase.TIMED_OUT, BridgeCommandPhase.RESULT_MISMATCH, BridgeCommandPhase.LAUNCH_FAILED -> Color(0xFFFFD166)
+        else -> Color(0xFF9AA4B2)
     }
 }
