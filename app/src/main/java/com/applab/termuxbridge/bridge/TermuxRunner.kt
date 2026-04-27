@@ -17,7 +17,11 @@ class TermuxRunner(private val context: Context) {
 
     fun run(action: BridgeAction): RunResult {
         if (!isTermuxInstalled()) {
-            return RunResult(false, "Termux is not installed or is not visible to this app.")
+            return RunResult(
+                started = false,
+                phase = BridgeCommandPhase.LAUNCH_FAILED,
+                message = "Termux is not installed or is not visible to this app. Install Termux or allow package visibility."
+            )
         }
         return try {
             val intent = Intent(TERMUX_RUN_COMMAND_ACTION).apply {
@@ -31,13 +35,29 @@ class TermuxRunner(private val context: Context) {
                 putExtra(EXTRA_COMMAND_DESCRIPTION, "Run approved AppLab bridge action ${action.id}")
             }
             context.startService(intent)
-            RunResult(true, "Started ${action.label}. Waiting for result file.")
+            RunResult(
+                started = true,
+                phase = BridgeCommandPhase.WAITING_FOR_RESULT,
+                message = "Requested Termux action: ${action.id}. Waiting for results/latest_result.json to update."
+            )
         } catch (_: SecurityException) {
-            RunResult(false, "Permission denied. Grant this app permission to run commands in Termux.")
+            RunResult(
+                started = false,
+                phase = BridgeCommandPhase.LAUNCH_FAILED,
+                message = "Permission denied. Grant this app permission to run commands in Termux and confirm allow-external-apps=true in Termux."
+            )
         } catch (_: ActivityNotFoundException) {
-            RunResult(false, "Termux RunCommandService was not found.")
+            RunResult(
+                started = false,
+                phase = BridgeCommandPhase.LAUNCH_FAILED,
+                message = "Termux RunCommandService was not found. Check Termux version and installation source."
+            )
         } catch (error: Exception) {
-            RunResult(false, "Failed to start Termux action: ${error.message ?: error::class.java.simpleName}")
+            RunResult(
+                started = false,
+                phase = BridgeCommandPhase.LAUNCH_FAILED,
+                message = "Failed to start Termux action: ${error.message ?: error::class.java.simpleName}"
+            )
         }
     }
 
@@ -58,4 +78,8 @@ class TermuxRunner(private val context: Context) {
     }
 }
 
-data class RunResult(val started: Boolean, val message: String)
+data class RunResult(
+    val started: Boolean,
+    val phase: BridgeCommandPhase,
+    val message: String
+)
