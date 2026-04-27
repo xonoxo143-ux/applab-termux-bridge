@@ -1,8 +1,6 @@
 package com.applab.termuxbridge.ui
 
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -34,12 +32,12 @@ fun BridgeReadinessCard(
     onPickFolder: () -> Unit,
     onRunAction: (BridgeAction) -> Unit
 ) {
-    BridgeSectionCard("System Readiness") {
-        BridgeStatusLine("Bridge folder", if (treeUri == null) "missing" else "selected", treeUri != null)
-        BridgeStatusLine("Latest result", if (latestResult.isLoaded) "loaded" else "missing", latestResult.isLoaded)
-        BridgeStatusLine("Last action", latestResult.action.ifBlank { "none" }, latestResult.status.equals("success", true))
+    BridgeSectionCard("Setup Status") {
+        BridgeStatusLine("Shared folder access", if (treeUri == null) "not selected" else "selected", treeUri != null)
+        BridgeStatusLine("Saved result file", if (latestResult.isLoaded) "loaded" else "not found", latestResult.isLoaded)
+        BridgeStatusLine("Last Termux action", latestResult.action.ifBlank { "none" }, latestResult.status.equals("success", true))
         if (treeUri == null) {
-            BridgePrimaryButton("Pick Bridge Folder", onPickFolder)
+            BridgePrimaryButton("Choose Shared Bridge Folder", onPickFolder)
         } else {
             BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
         }
@@ -52,17 +50,17 @@ fun BridgeActiveRepoCard(
     onRunAction: (BridgeAction) -> Unit,
     onGoTo: (BridgeAppScreen) -> Unit
 ) {
-    BridgeSectionCard("Active Repo") {
+    BridgeSectionCard("Selected Repo") {
         BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
         BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
-        BridgeStatusLine("State", latestResult.stateLabel, latestResult.dirty == false)
+        BridgeStatusLine("Git state", latestResult.stateLabel, latestResult.dirty == false)
         BridgeStatusLine("Changes", latestResult.changeBreakdownLabel, latestResult.dirty == false)
         BridgeStatusLine("Patch file", latestResult.patchLabel, latestResult.hasPatchFile == true)
         latestResult.currentCommit?.let { commit -> BridgeStatusLine("Commit", commit, true) }
         latestResult.upstream?.takeIf { it.isNotBlank() }?.let { upstream -> BridgeStatusLine("Upstream", upstream, true) }
         BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
-        BridgeSecondaryButton("Open Repo Workbench") { onGoTo(BridgeAppScreen.REPO) }
+        BridgeSecondaryButton("Go to Repo Workbench") { onGoTo(BridgeAppScreen.REPO) }
     }
 }
 
@@ -76,7 +74,7 @@ fun BridgeNextActionCard(
     onGoTo: (BridgeAppScreen) -> Unit
 ) {
     val action = bridgeRecommendedAction(treeUri, latestResult)
-    BridgeSectionCard("Recommended Next") {
+    BridgeSectionCard("Suggested Next Step") {
         Text(action.title, color = Color.White, fontWeight = FontWeight.Bold)
         BridgeHintText(action.detail)
         when {
@@ -96,18 +94,18 @@ fun BridgeLatestResultCard(
     onOpenLog: () -> Unit,
     onGoTo: (BridgeAppScreen) -> Unit
 ) {
-    BridgeSectionCard("Latest Result") {
+    BridgeSectionCard("Last Saved Termux Result") {
         BridgeResultBlock(result)
-        BridgePrimaryButton("Open Report", onOpenReport)
-        BridgeSecondaryButton("Open Latest Log", onOpenLog)
-        BridgeSecondaryButton("Refresh Result", onRefresh)
-        BridgeSecondaryButton("All Results Tools") { onGoTo(BridgeAppScreen.RESULTS) }
+        BridgePrimaryButton("Open Last Action Report", onOpenReport)
+        BridgeSecondaryButton("Open Latest Log File", onOpenLog)
+        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
+        BridgeSecondaryButton("Go to Results Tools") { onGoTo(BridgeAppScreen.RESULTS) }
     }
 }
 
 @Composable
 fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Repo Selection") {
+    BridgeSectionCard("Choose Repo") {
         BridgeActionGroup(
             actions = listOf(
                 BridgeAction.LIST_PROJECTS,
@@ -118,7 +116,7 @@ fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
             onRunAction = onRunAction
         )
     }
-    BridgeSectionCard("Inspect") {
+    BridgeSectionCard("Read Repo State") {
         BridgeActionGroup(
             actions = listOf(
                 BridgeAction.SHOW_STATUS,
@@ -131,8 +129,8 @@ fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
             onRunAction = onRunAction
         )
     }
-    BridgeSectionCard("Update") {
-        BridgeHintText("Pull/checkout actions should be used on a clean repo.")
+    BridgeSectionCard("Update Repo From GitHub") {
+        BridgeHintText("Pull and checkout actions should be used on a clean repo.")
         BridgeActionGroup(
             actions = listOf(
                 BridgeAction.FETCH_REPO,
@@ -147,8 +145,8 @@ fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
 
 @Composable
 fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Patch Runner") {
-        BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the active repo. Review status and branch first.")
+    BridgeSectionCard("Run Patch File") {
+        BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the selected repo. Check repo and branch first.")
         BridgeStatusLine("Patch file", latestResult.patchLabel, latestResult.hasPatchFile == true)
         BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
@@ -156,8 +154,8 @@ fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeActi
         BridgeActionButton(BridgeAction.LIST_CHANGED_FILES, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_DIFF_SUMMARY, onRunAction)
     }
-    BridgeSectionCard("Publish") {
-        BridgeHintText("Use only after reviewing the diff. Commit action appends [no apk] if needed.")
+    BridgeSectionCard("Commit and Push") {
+        BridgeHintText("Use only after reviewing the diff. The commit action appends [no apk] when needed.")
         BridgeStatusLine("Staged", "${latestResult.stagedFiles ?: 0}", (latestResult.stagedFiles ?: 0) > 0)
         BridgeStatusLine("Unstaged", "${latestResult.unstagedFiles ?: 0}", (latestResult.unstagedFiles ?: 0) == 0)
         BridgeStatusLine("Untracked", "${latestResult.untrackedFiles ?: 0}", (latestResult.untrackedFiles ?: 0) == 0)
@@ -174,15 +172,15 @@ fun BridgeApkScreen(
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    BridgeSectionCard("Update App from GitHub") {
-        BridgeHintText("Checks the latest successful Debug APK workflow, downloads the APK to the bridge folder, then you install it with the local installer.")
+    BridgeSectionCard("Download App Update") {
+        BridgeHintText("Uses Termux and GitHub CLI to find the latest successful Debug APK workflow artifact, then saves the APK to the shared bridge folder.")
         BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
         BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
     }
     BridgeSectionCard("Install Downloaded APK") {
-        Text(text = "Latest local APK: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
-        BridgePrimaryButton("Install Latest Local APK", onInstall)
-        BridgeSecondaryButton("Open Install Settings", onInstallSettings)
+        Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
+        BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
+        BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
         BridgeHintText("Android may ask for permission to install unknown apps from AppLab Bridge.")
     }
 }
@@ -195,12 +193,12 @@ fun BridgeResultsScreen(
     onOpenLog: () -> Unit,
     onOpenDebugZip: () -> Unit
 ) {
-    BridgeSectionCard("Result Detail") {
+    BridgeSectionCard("Saved Result File") {
         BridgeResultBlock(result)
-        BridgePrimaryButton("Open Report", onOpenReport)
-        BridgeSecondaryButton("Open Latest Log", onOpenLog)
+        BridgePrimaryButton("Open Last Action Report", onOpenReport)
+        BridgeSecondaryButton("Open Latest Log File", onOpenLog)
         BridgeSecondaryButton("Open Latest Debug Zip", onOpenDebugZip)
-        BridgeSecondaryButton("Refresh Result", onRefresh)
+        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
     }
 }
 
@@ -212,19 +210,19 @@ fun BridgeSetupScreen(
     onOpenSettings: () -> Unit,
     onClipboard: () -> Unit
 ) {
-    BridgeSectionCard("Bridge Folder") {
-        BridgePrimaryButton("Pick Documents/AppLabBridge", onPickFolder)
-        BridgeSecondaryButton("Refresh Latest Result", onRefresh)
-        BridgeHintText("Termux should write to ~/storage/shared/Documents/AppLabBridge.")
+    BridgeSectionCard("Shared Bridge Folder") {
+        BridgePrimaryButton("Choose Documents/AppLabBridge Folder", onPickFolder)
+        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
+        BridgeHintText("This only rereads Documents/AppLabBridge/results/latest_result.json. It does not run a Termux command.")
     }
-    BridgeSectionCard("Termux Setup") {
+    BridgeSectionCard("Termux Backend") {
         BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
         BridgeActionButton(BridgeAction.UPDATE_DISPATCHER, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeSecondaryButton("Open App Permission Settings", onOpenSettings)
-        BridgeHintText("Required: Termux storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
+        BridgeSecondaryButton("Open Android Permissions for This App", onOpenSettings)
+        BridgeHintText("Termux needs storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
     }
     BridgeSectionCard("Parked Tools") {
-        BridgeSecondaryButton("Write Clipboard to Inbox", onClipboard)
-        BridgeHintText("Save-code, source audit, APK download, and debug bundle buttons remain parked until their backend paths are clean.")
+        BridgeSecondaryButton("Save Clipboard Text to Inbox", onClipboard)
+        BridgeHintText("These tools are parked until their backend workflows are clean and testable.")
     }
 }
