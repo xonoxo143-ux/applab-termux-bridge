@@ -21,9 +21,9 @@ repo_json_fields() {
     BRANCH="$(git branch --show-current 2>/dev/null || true)"
     CHANGED_FILES="$(git status --short 2>/dev/null | wc -l | tr -d ' ')"
     if [ "${CHANGED_FILES:-0}" -gt 0 ]; then
-      DIRTY="true"
+      DIRTY="True"
     else
-      DIRTY="false"
+      DIRTY="False"
     fi
     AHEAD="0"
     BEHIND="0"
