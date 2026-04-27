@@ -9,10 +9,14 @@ RESULTS_DIR="$SHARED_DIR/results"
 REPORTS_DIR="$SHARED_DIR/reports"
 LOGS_DIR="$SHARED_DIR/logs"
 CONFIG_DIR="$SHARED_DIR/config"
+APKS_DIR="$SHARED_DIR/apks"
 RUN_ID="$(date +%Y%m%d_%H%M%S)_$$"
 LOG_FILE="$LOGS_DIR/${RUN_ID}_${ACTION}.log"
+BRIDGE_REPO="xonoxo143-ux/applab-termux-bridge"
+BRIDGE_WORKFLOW="Debug APK"
+BRIDGE_ARTIFACT="applab-termux-bridge-debug-apk"
 
-mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR"
+mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR" "$APKS_DIR"
 
 repo_json_fields() {
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -116,6 +120,10 @@ need_repo() {
     exit 1
   fi
   cd "$REPO" || exit 1
+}
+
+latest_bridge_run_id() {
+  gh run list --repo "$BRIDGE_REPO" --workflow "$BRIDGE_WORKFLOW" --status success --limit 1 --json databaseId --jq '.[0].databaseId'
 }
 
 case "$ACTION" in
@@ -291,6 +299,69 @@ case "$ACTION" in
   fetch_repo)
     need_repo
     run_report "fetch_repo.txt" git fetch --all --prune
+    ;;
+
+  check_latest_apk)
+    REPORT_FILE="$REPORTS_DIR/check_latest_apk.txt"
+    {
+      echo "GitHub debug APK source"
+      echo "Repo: $BRIDGE_REPO"
+      echo "Workflow: $BRIDGE_WORKFLOW"
+      echo "Artifact: $BRIDGE_ARTIFACT"
+      echo
+      echo "Latest successful workflow run:"
+      gh run list --repo "$BRIDGE_REPO" --workflow "$BRIDGE_WORKFLOW" --status success --limit 3 || true
+      echo
+      echo "Local APKs:"
+      find "$APKS_DIR" -name '*.apk' -type f 2>/dev/null | sort | tail -n 20
+    } > "$REPORT_FILE" 2>&1
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE"
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "APK update checked" "Latest APK report written." "$CODE" "$REPORT_FILE"
+    else
+      write_result "failed" "APK update check failed" "See report/log." "$CODE" "$REPORT_FILE"
+    fi
+    exit "$CODE"
+    ;;
+
+  download_latest_apk)
+    REPORT_FILE="$REPORTS_DIR/download_latest_apk.txt"
+    TMP_DIR="$SHARED_DIR/tmp_apk_download_$RUN_ID"
+    {
+      echo "Downloading latest AppLab Bridge debug APK"
+      echo "Repo: $BRIDGE_REPO"
+      echo "Workflow: $BRIDGE_WORKFLOW"
+      echo "Artifact: $BRIDGE_ARTIFACT"
+      echo
+      RUN_DATABASE_ID="$(latest_bridge_run_id)"
+      if [ -z "$RUN_DATABASE_ID" ] || [ "$RUN_DATABASE_ID" = "null" ]; then
+        echo "No successful workflow run found."
+        exit 1
+      fi
+      echo "Run database id: $RUN_DATABASE_ID"
+      rm -rf "$TMP_DIR"
+      mkdir -p "$TMP_DIR" "$APKS_DIR"
+      gh run download "$RUN_DATABASE_ID" --repo "$BRIDGE_REPO" --name "$BRIDGE_ARTIFACT" --dir "$TMP_DIR"
+      APK_FILE="$(find "$TMP_DIR" -name '*.apk' -type f | head -n 1)"
+      if [ -z "$APK_FILE" ]; then
+        echo "Artifact downloaded, but no APK file was found."
+        exit 1
+      fi
+      OUT_FILE="$APKS_DIR/AppLabBridge-latest-${RUN_DATABASE_ID}.apk"
+      cp "$APK_FILE" "$OUT_FILE"
+      rm -rf "$TMP_DIR"
+      echo "Downloaded APK: $OUT_FILE"
+      ls -lh "$OUT_FILE"
+    } > "$REPORT_FILE" 2>&1
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE"
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "APK downloaded" "Latest AppLab Bridge APK downloaded to apks/." "$CODE" "$REPORT_FILE"
+    else
+      write_result "failed" "APK download failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE"
+    fi
+    exit "$CODE"
     ;;
 
   *)
