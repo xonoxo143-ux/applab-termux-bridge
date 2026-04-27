@@ -9,11 +9,14 @@ data class BridgeResult(
     val action: String = "",
     val status: String = "unknown",
     val title: String = "No result loaded",
-    val summary: String = "Pick the bridge folder, run an action, then refresh the result.",
+    val summary: String = "Pick the bridge folder, run an action, then reload the saved result file.",
     val exitCode: Int? = null,
     val reportFile: String? = null,
     val logFile: String? = null,
     val nextAction: String? = null,
+    val diagnosticHint: String? = null,
+    val startedAt: String? = null,
+    val finishedAt: String? = null,
     val artifacts: List<String> = emptyList(),
     val repoPath: String? = null,
     val repoName: String? = null,
@@ -73,19 +76,22 @@ data class BridgeResult(
         fun missingFolder(): BridgeResult = BridgeResult(
             status = "missing",
             title = "No bridge folder selected",
-            summary = "Pick Documents/AppLabBridge before running or reading actions."
+            summary = "Pick Documents/AppLabBridge before running or reading actions.",
+            diagnosticHint = "Choose the shared bridge folder from Android storage, not a Termux-private path."
         )
 
         fun missingResult(): BridgeResult = BridgeResult(
             status = "missing",
             title = "No result file found",
-            summary = "The selected folder does not contain results/latest_result.json. Termux may be writing to a different AppLabBridge folder, or no action has run yet."
+            summary = "The selected folder does not contain results/latest_result.json.",
+            diagnosticHint = "Run a Termux action, then reload the saved result file. If Termux already wrote a result, re-pick Documents/AppLabBridge."
         )
 
         fun invalidJson(message: String): BridgeResult = BridgeResult(
             status = "failed",
             title = "Invalid result JSON",
-            summary = message
+            summary = message,
+            diagnosticHint = "The result file exists but could not be parsed. Open the report/log or delete results/latest_result.json and rerun an action."
         )
 
         fun fromJson(text: String): BridgeResult {
@@ -109,6 +115,9 @@ data class BridgeResult(
                     reportFile = json.optNullableString("report_file"),
                     logFile = json.optNullableString("log_file"),
                     nextAction = json.optNullableString("next_action"),
+                    diagnosticHint = json.optNullableString("diagnostic_hint"),
+                    startedAt = json.optNullableString("started_at"),
+                    finishedAt = json.optNullableString("finished_at"),
                     artifacts = artifacts,
                     repoPath = json.optNullableString("repo_path"),
                     repoName = json.optNullableString("repo_name"),
