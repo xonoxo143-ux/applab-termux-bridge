@@ -167,6 +167,7 @@ fun AppLabBridgeApp() {
                     AppScreen.PATCH -> PatchRunnerScreen(onRunAction = ::runAction)
                     AppScreen.APK -> ApkScreen(
                         latestApkName = apkInstaller.latestApkName(treeUri),
+                        onRunAction = ::runAction,
                         onInstall = { statusText = apkInstaller.installLatest(treeUri).message },
                         onInstallSettings = { apkInstaller.openInstallSettings() }
                     )
@@ -419,10 +420,16 @@ private fun PatchRunnerScreen(onRunAction: (BridgeAction) -> Unit) {
 @Composable
 private fun ApkScreen(
     latestApkName: String?,
+    onRunAction: (BridgeAction) -> Unit,
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    SectionCard("Local APK") {
+    SectionCard("Update App from GitHub") {
+        HintText("Checks the latest successful Debug APK workflow, downloads the APK to the bridge folder, then you install it with the local installer.")
+        ActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
+        ActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = ActionTone.WARNING)
+    }
+    SectionCard("Install Downloaded APK") {
         Text(
             text = "Latest local APK: ${latestApkName ?: "none found"}",
             color = Color(0xFF9AA4B2),
@@ -430,7 +437,7 @@ private fun ApkScreen(
         )
         PrimaryButton("Install Latest Local APK", onInstall)
         SecondaryButton("Open Install Settings", onInstallSettings)
-        HintText("Artifact download is parked. Download APKs from GitHub or place one in the bridge folder first.")
+        HintText("Android may ask for permission to install unknown apps from AppLab Bridge.")
     }
 }
 
@@ -611,6 +618,9 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
             tone = ActionTone.WARNING
         )
     }
+    if (result.action == "download_latest_apk") {
+        return RecommendedAction("Install the downloaded APK", "The latest APK should now be in the bridge folder. Install it from Build / APK.", "Open Build / APK", screen = AppScreen.APK)
+    }
     if (result.dirty == true && result.action == "show_status") {
         return RecommendedAction("Review the diff", "The active repo has changed files. Review before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
     }
@@ -620,6 +630,7 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
     return when (result.action) {
         "check_setup" -> RecommendedAction("Choose a repo", "Setup passed. Select an active repo or check the current one.", BridgeAction.SHOW_ACTIVE_REPO.label, BridgeAction.SHOW_ACTIVE_REPO)
         "set_active_bridge", "set_active_libreseed", "show_active_repo" -> RecommendedAction("Refresh repo status", "The active repo changed or was checked. Pull a fresh status next.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
+        "check_latest_apk" -> RecommendedAction("Download GitHub APK", "A successful app build is available if the report found a workflow run.", BridgeAction.DOWNLOAD_LATEST_APK.label, BridgeAction.DOWNLOAD_LATEST_APK, tone = ActionTone.WARNING)
         "pull_current", "pull_staging", "checkout_staging" -> RecommendedAction("Review changed files", "Status is current. Check whether anything changed before patching or publishing.", BridgeAction.LIST_CHANGED_FILES.label, BridgeAction.LIST_CHANGED_FILES)
         "run_patch_script" -> RecommendedAction("Review patch result", "A patch ran. Review changed files and diff before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
         "list_changed_files", "show_diff_summary", "show_full_diff" -> RecommendedAction("Open Patch / Publish", "If the diff is correct, stage and commit from the guarded workflow screen.", "Open Patch / Publish", screen = AppScreen.PATCH, tone = ActionTone.WARNING)
