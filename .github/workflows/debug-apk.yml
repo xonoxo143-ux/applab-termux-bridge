@@ -27,7 +27,18 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Decode signing keystore
+        if: ${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 != '' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/applab-signing"
+          printf '%s' '${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 }}' | base64 --decode > "$RUNNER_TEMP/applab-signing/applab-dev.keystore"
+
       - name: Build debug APK
+        env:
+          APPLAB_SIGNING_KEYSTORE: ${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 != '' && format('{0}/applab-signing/applab-dev.keystore', runner.temp) || '' }}
+          APPLAB_SIGNING_STORE_PASSWORD: ${{ secrets.APPLAB_SIGNING_STORE_PASSWORD }}
+          APPLAB_SIGNING_KEY_ALIAS: ${{ secrets.APPLAB_SIGNING_KEY_ALIAS }}
+          APPLAB_SIGNING_KEY_PASSWORD: ${{ secrets.APPLAB_SIGNING_KEY_PASSWORD }}
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Upload debug APK
