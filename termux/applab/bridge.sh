@@ -14,12 +14,35 @@ LOG_FILE="$LOGS_DIR/${RUN_ID}_${ACTION}.log"
 
 mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR"
 
+repo_json_fields() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    REPO_PATH="$(pwd)"
+    REPO_NAME="$(basename "$REPO_PATH")"
+    BRANCH="$(git branch --show-current 2>/dev/null || true)"
+    CHANGED_FILES="$(git status --short 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${CHANGED_FILES:-0}" -gt 0 ]; then
+      DIRTY="true"
+    else
+      DIRTY="false"
+    fi
+    AHEAD="0"
+    BEHIND="0"
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+      COUNTS="$(git rev-list --left-right --count HEAD...@{u} 2>/dev/null || echo '0 0')"
+      AHEAD="$(printf '%s' "$COUNTS" | awk '{print $1}')"
+      BEHIND="$(printf '%s' "$COUNTS" | awk '{print $2}')"
+    fi
+    printf ',\n  "repo_path": "%s",\n  "repo_name": "%s",\n  "branch": "%s",\n  "dirty": %s,\n  "changed_files": %s,\n  "ahead": %s,\n  "behind": %s' "$REPO_PATH" "$REPO_NAME" "$BRANCH" "$DIRTY" "${CHANGED_FILES:-0}" "${AHEAD:-0}" "${BEHIND:-0}"
+  fi
+}
+
 write_result() {
   STATUS="$1"
   TITLE="$2"
   SUMMARY="$3"
   EXIT_CODE="$4"
   REPORT_FILE="${5:-}"
+  EXTRA_FIELDS="$(repo_json_fields || true)"
 
   python3 - "$RESULTS_DIR/latest_result.json" <<PY
 import json, sys, os
@@ -35,7 +58,7 @@ data = {
   "report_file": "$REPORT_FILE",
   "log_file": "$LOG_FILE",
   "next_action": "",
-  "artifacts": []
+  "artifacts": []$EXTRA_FIELDS
 }
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w", encoding="utf-8") as f:
@@ -150,13 +173,14 @@ case "$ACTION" in
       active_repo || true
     } > "$REPORT_FILE" 2>&1
     cat "$REPORT_FILE" > "$LOG_FILE"
+    need_repo
     write_result "success" "Active repo checked" "Active repo report written." 0 "$REPORT_FILE"
     ;;
 
   set_active_libreseed)
     TARGET="$PROJECTS_DIR/libreseed-labs-android"
     if [ ! -d "$TARGET/.git" ]; then
-      write_result "failed" "LibreSeed repo missing" "Clone LibreSeed before selecting it." 1 "" 
+      write_result "failed" "LibreSeed repo missing" "Clone LibreSeed before selecting it." 1 ""
       exit 1
     fi
     printf '%s\n' "$TARGET" > "$CONFIG_DIR/active_repo.txt"
@@ -166,6 +190,7 @@ case "$ACTION" in
       cat "$CONFIG_DIR/active_repo.txt"
     } > "$REPORT_FILE" 2>&1
     cat "$REPORT_FILE" > "$LOG_FILE"
+    cd "$TARGET" || exit 1
     write_result "success" "Active repo set" "LibreSeed is now active." 0 "$REPORT_FILE"
     ;;
 
@@ -182,6 +207,7 @@ case "$ACTION" in
       cat "$CONFIG_DIR/active_repo.txt"
     } > "$REPORT_FILE" 2>&1
     cat "$REPORT_FILE" > "$LOG_FILE"
+    cd "$TARGET" || exit 1
     write_result "success" "Active repo set" "Bridge repo is now active." 0 "$REPORT_FILE"
     ;;
 
