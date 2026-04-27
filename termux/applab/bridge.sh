@@ -15,8 +15,10 @@ LOG_FILE="$LOGS_DIR/${RUN_ID}_${ACTION}.log"
 BRIDGE_REPO="xonoxo143-ux/applab-termux-bridge"
 BRIDGE_WORKFLOW="Debug APK"
 BRIDGE_ARTIFACT="applab-termux-bridge-debug-apk"
+BRIDGE_LOCAL_DIR="$PROJECTS_DIR/applab-termux-bridge"
+LIVE_DISPATCHER="$HOME_DIR/.termux/applab/bridge.sh"
 
-mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR" "$APKS_DIR"
+mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$LOGS_DIR" "$CONFIG_DIR" "$PROJECTS_DIR" "$APKS_DIR" "$HOME_DIR/.termux/applab"
 
 repo_json_fields() {
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -135,6 +137,7 @@ case "$ACTION" in
       echo "Termux home: $HOME_DIR"
       echo "Projects dir: $PROJECTS_DIR"
       echo "Shared dir: $SHARED_DIR"
+      echo "Live dispatcher: $LIVE_DISPATCHER"
       echo
       echo "Tools:"
       command -v git || true
@@ -147,6 +150,47 @@ case "$ACTION" in
     } > "$REPORT_FILE" 2>&1
     cat "$REPORT_FILE" > "$LOG_FILE"
     write_result "success" "Setup checked" "Setup report written." 0 "$REPORT_FILE"
+    ;;
+
+  update_dispatcher)
+    REPORT_FILE="$REPORTS_DIR/update_dispatcher.txt"
+    {
+      echo "Updating AppLab Bridge dispatcher from GitHub"
+      echo "Repo: $BRIDGE_REPO"
+      echo "Local repo: $BRIDGE_LOCAL_DIR"
+      echo "Live dispatcher: $LIVE_DISPATCHER"
+      echo
+      cd "$PROJECTS_DIR"
+      if [ ! -d "$BRIDGE_LOCAL_DIR/.git" ]; then
+        echo "Bridge repo not found. Cloning."
+        gh repo clone "$BRIDGE_REPO" applab-termux-bridge
+      fi
+      cd "$BRIDGE_LOCAL_DIR"
+      git checkout main
+      git pull --ff-only
+      if [ ! -f termux/applab/bridge.sh ]; then
+        echo "Repo dispatcher file missing: termux/applab/bridge.sh"
+        exit 1
+      fi
+      mkdir -p "$(dirname "$LIVE_DISPATCHER")"
+      cp termux/applab/bridge.sh "$LIVE_DISPATCHER"
+      chmod +x "$LIVE_DISPATCHER"
+      echo
+      echo "Dispatcher updated."
+      ls -l "$LIVE_DISPATCHER"
+      echo
+      echo "Current bridge repo commit:"
+      git log -1 --oneline
+    } > "$REPORT_FILE" 2>&1
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE"
+    cd "$BRIDGE_LOCAL_DIR" 2>/dev/null || true
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "Dispatcher updated" "Termux dispatcher copied from latest bridge repo." "$CODE" "$REPORT_FILE"
+    else
+      write_result "failed" "Dispatcher update failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE"
+    fi
+    exit "$CODE"
     ;;
 
   list_projects)
