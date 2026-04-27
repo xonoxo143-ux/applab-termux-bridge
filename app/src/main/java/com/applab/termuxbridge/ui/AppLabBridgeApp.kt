@@ -215,6 +215,12 @@ private fun AppHeader(
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
+                text = repoHeaderText(latestResult),
+                color = repoStateColor(latestResult),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
                 text = statusChipText(latestResult),
                 color = statusColor(latestResult.status),
                 style = MaterialTheme.typography.bodySmall,
@@ -250,6 +256,8 @@ private fun StatusPanel(status: String, treeUri: Uri?, result: BridgeResult) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(status, color = Color.White, fontWeight = FontWeight.Bold)
             Text(folderText, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
+            Text(result.repoLabel, color = repoStateColor(result), style = MaterialTheme.typography.bodyMedium)
+            Text(result.stateLabel, color = repoStateColor(result), style = MaterialTheme.typography.bodySmall)
             Text(
                 text = "Last: ${result.status.uppercase()} — ${result.title}",
                 color = statusColor(result.status),
@@ -271,7 +279,7 @@ private fun HomeScreen(
     onGoTo: (AppScreen) -> Unit
 ) {
     ReadinessCard(treeUri, latestResult, onPickFolder, onRunAction)
-    ActiveRepoCard(onRunAction, onGoTo)
+    ActiveRepoCard(latestResult, onRunAction, onGoTo)
     NextActionCard(treeUri, latestResult, onPickFolder, onRunAction, onOpenReport, onGoTo)
     LatestResultCard(latestResult, onRefresh, onOpenReport, onOpenLog, onGoTo)
 }
@@ -297,11 +305,14 @@ private fun ReadinessCard(
 
 @Composable
 private fun ActiveRepoCard(
+    latestResult: BridgeResult,
     onRunAction: (BridgeAction) -> Unit,
     onGoTo: (AppScreen) -> Unit
 ) {
     SectionCard("Active Repo") {
-        HintText("Choose the repo, then refresh status before patching or publishing.")
+        StatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
+        StatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
+        StatusLine("State", latestResult.stateLabel, latestResult.dirty == false)
         ActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         ActionButton(BridgeAction.SHOW_STATUS, onRunAction)
         SecondaryButton("Open Repo Workbench") { onGoTo(AppScreen.REPO) }
@@ -551,6 +562,8 @@ private fun ResultBlock(result: BridgeResult) {
     ) {
         Text(result.title, color = Color.White, fontWeight = FontWeight.Bold)
         Text(result.summary, color = Color(0xFFC7D0DA))
+        Text("Repo: ${result.repoLabel}", color = repoStateColor(result), fontFamily = FontFamily.Monospace)
+        Text("State: ${result.stateLabel}", color = repoStateColor(result), fontFamily = FontFamily.Monospace)
         Text("Action: ${result.action.ifBlank { "none" }}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
         Text("Run: ${result.runId.ifBlank { "none" }}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
         Text("Exit: ${result.exitCode?.toString() ?: "n/a"}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
@@ -598,10 +611,16 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
             tone = ActionTone.WARNING
         )
     }
+    if (result.dirty == true && result.action == "show_status") {
+        return RecommendedAction("Review the diff", "The active repo has changed files. Review before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
+    }
+    if (result.dirty == false && result.action == "show_status") {
+        return RecommendedAction("Ready for patch or pull", "The active repo is clean. Pull current branch or open the patch workflow.", "Open Patch Runner", screen = AppScreen.PATCH)
+    }
     return when (result.action) {
         "check_setup" -> RecommendedAction("Choose a repo", "Setup passed. Select an active repo or check the current one.", BridgeAction.SHOW_ACTIVE_REPO.label, BridgeAction.SHOW_ACTIVE_REPO)
         "set_active_bridge", "set_active_libreseed", "show_active_repo" -> RecommendedAction("Refresh repo status", "The active repo changed or was checked. Pull a fresh status next.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
-        "show_status", "pull_current", "pull_staging", "checkout_staging" -> RecommendedAction("Review changed files", "Status is current. Check whether anything changed before patching or publishing.", BridgeAction.LIST_CHANGED_FILES.label, BridgeAction.LIST_CHANGED_FILES)
+        "pull_current", "pull_staging", "checkout_staging" -> RecommendedAction("Review changed files", "Status is current. Check whether anything changed before patching or publishing.", BridgeAction.LIST_CHANGED_FILES.label, BridgeAction.LIST_CHANGED_FILES)
         "run_patch_script" -> RecommendedAction("Review patch result", "A patch ran. Review changed files and diff before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
         "list_changed_files", "show_diff_summary", "show_full_diff" -> RecommendedAction("Open Patch / Publish", "If the diff is correct, stage and commit from the guarded workflow screen.", "Open Patch / Publish", screen = AppScreen.PATCH, tone = ActionTone.WARNING)
         "stage_all" -> RecommendedAction("Commit staged changes", "Files were staged. Commit with [no apk] unless this change should build an APK.", BridgeAction.COMMIT_NO_APK.label, BridgeAction.COMMIT_NO_APK, tone = ActionTone.WARNING)
@@ -609,6 +628,11 @@ private fun recommendedAction(treeUri: Uri?, result: BridgeResult): RecommendedA
         "push_current" -> RecommendedAction("Refresh status", "Push completed. Refresh the active repo status.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
         else -> RecommendedAction("Refresh status", "Start by checking the active repo state.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
     }
+}
+
+private fun repoHeaderText(result: BridgeResult): String {
+    if (result.repoName == null && result.branch == null) return "No repo state loaded"
+    return "${result.repoLabel} · ${result.stateLabel}"
 }
 
 private fun statusChipText(result: BridgeResult): String {
@@ -623,6 +647,16 @@ private fun statusColor(status: String): Color {
         "failed" -> Color(0xFFFF6B6B)
         "running" -> Color(0xFFFFD166)
         "missing" -> Color(0xFFFFD166)
+        else -> Color(0xFF9AA4B2)
+    }
+}
+
+private fun repoStateColor(result: BridgeResult): Color {
+    return when {
+        result.dirty == true -> Color(0xFFFFD166)
+        result.ahead != null && result.ahead > 0 -> Color(0xFFFFD166)
+        result.behind != null && result.behind > 0 -> Color(0xFFFFD166)
+        result.dirty == false -> Color(0xFF5CE38A)
         else -> Color(0xFF9AA4B2)
     }
 }
