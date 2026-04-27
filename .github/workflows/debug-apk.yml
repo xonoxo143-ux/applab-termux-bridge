@@ -27,15 +27,21 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Decode signing keystore
-        if: ${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 != '' }}
+      - name: Decode signing keystore if configured
+        env:
+          APPLAB_SIGNING_KEYSTORE_BASE64: ${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 }}
         run: |
-          mkdir -p "$RUNNER_TEMP/applab-signing"
-          printf '%s' '${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 }}' | base64 --decode > "$RUNNER_TEMP/applab-signing/applab-dev.keystore"
+          if [ -n "$APPLAB_SIGNING_KEYSTORE_BASE64" ]; then
+            mkdir -p "$RUNNER_TEMP/applab-signing"
+            printf '%s' "$APPLAB_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/applab-signing/applab-dev.keystore"
+            echo "APPLAB_SIGNING_KEYSTORE=$RUNNER_TEMP/applab-signing/applab-dev.keystore" >> "$GITHUB_ENV"
+            echo "Stable signing keystore configured."
+          else
+            echo "No stable signing keystore configured. Falling back to debug signing."
+          fi
 
       - name: Build debug APK
         env:
-          APPLAB_SIGNING_KEYSTORE: ${{ secrets.APPLAB_SIGNING_KEYSTORE_BASE64 != '' && format('{0}/applab-signing/applab-dev.keystore', runner.temp) || '' }}
           APPLAB_SIGNING_STORE_PASSWORD: ${{ secrets.APPLAB_SIGNING_STORE_PASSWORD }}
           APPLAB_SIGNING_KEY_ALIAS: ${{ secrets.APPLAB_SIGNING_KEY_ALIAS }}
           APPLAB_SIGNING_KEY_PASSWORD: ${{ secrets.APPLAB_SIGNING_KEY_PASSWORD }}
