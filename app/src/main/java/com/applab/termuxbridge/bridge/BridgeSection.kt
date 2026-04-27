@@ -2,7 +2,7 @@ package com.applab.termuxbridge.bridge
 
 enum class BridgeSection(val title: String) {
     SETUP("Setup"),
-    REPO("GitHub / Repo"),
+    REPO("Git Workbench"),
     APK("APK"),
     SAVE("Save Codes"),
     AUDIT("Source Audits"),
