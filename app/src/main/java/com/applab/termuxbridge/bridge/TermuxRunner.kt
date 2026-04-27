@@ -65,7 +65,7 @@ class TermuxRunner(private val context: Context) {
         const val TERMUX_PACKAGE = "com.termux"
         private const val TERMUX_RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"
         private const val TERMUX_RUN_COMMAND_ACTION = "com.termux.RUN_COMMAND"
-        private const val BRIDGE_PATH = "/data/data/com.termux/files/home/.termux/applab/bridge.sh"
+        private const val BRIDGE_PATH = "/data/data/com.termux/files/home/.termux/applab/bridge_v2.sh"
         private const val TERMUX_HOME = "/data/data/com.termux/files/home"
 
         private const val EXTRA_PATH = "com.termux.RUN_COMMAND_PATH"
