@@ -18,21 +18,32 @@ class SafBridgeFolder(private val context: Context) {
 
     fun root(uri: Uri): DocumentFile? = DocumentFile.fromTreeUri(context, uri)
 
+    fun bridgeRoot(uri: Uri, create: Boolean = false): DocumentFile? {
+        val selected = root(uri) ?: return null
+        if (selected.name == BRIDGE_DIR_NAME) return selected
+
+        val existing = selected.findFile(BRIDGE_DIR_NAME)
+        if (existing != null && existing.isDirectory) return existing
+
+        return if (create) selected.createDirectory(BRIDGE_DIR_NAME) else selected
+    }
+
     fun prepareLayout(uri: Uri): FolderPreparationResult {
-        val root = root(uri) ?: return FolderPreparationResult(false, "Could not open selected folder.")
+        val bridge = bridgeRoot(uri, create = true) ?: return FolderPreparationResult(false, "Could not open or create AppLabBridge folder.")
         val created = mutableListOf<String>()
         REQUIRED_DIRS.forEach { name ->
-            if (root.findFile(name) == null) {
-                root.createDirectory(name) ?: return FolderPreparationResult(false, "Could not create $name folder.")
+            if (bridge.findFile(name) == null) {
+                bridge.createDirectory(name) ?: return FolderPreparationResult(false, "Could not create $name folder.")
                 created += name
             }
         }
-        val config = root.findFile("config") ?: return FolderPreparationResult(false, "Config folder is missing.")
+        val config = bridge.findFile("config") ?: return FolderPreparationResult(false, "Config folder is missing.")
         config.findFile("android_selected_folder.txt")?.delete()
         val marker = config.createFile("text/plain", "android_selected_folder.txt")
             ?: return FolderPreparationResult(false, "Could not write folder marker.")
         context.contentResolver.openOutputStream(marker.uri)?.bufferedWriter()?.use { writer ->
             writer.write("Selected by AppLab Termux Bridge Android app.\n")
+            writer.write("Resolved bridge folder: ${bridge.name}\n")
             writer.write("Recommended Termux path: ~/storage/shared/Documents/AppLabBridge\n")
         }
         return if (created.isEmpty()) {
@@ -48,8 +59,8 @@ class SafBridgeFolder(private val context: Context) {
     }
 
     fun writeText(uri: Uri, folderName: String, fileName: String, text: String): Boolean {
-        val root = root(uri) ?: return false
-        val folder = findOrCreateDir(root, folderName) ?: return false
+        val bridge = bridgeRoot(uri, create = true) ?: return false
+        val folder = findOrCreateDir(bridge, folderName) ?: return false
         folder.findFile(fileName)?.delete()
         val file = folder.createFile("text/plain", fileName) ?: return false
         context.contentResolver.openOutputStream(file.uri)?.bufferedWriter()?.use { writer -> writer.write(text) } ?: return false
@@ -57,7 +68,7 @@ class SafBridgeFolder(private val context: Context) {
     }
 
     fun find(uri: Uri, path: List<String>): DocumentFile? {
-        var current = root(uri) ?: return null
+        var current = bridgeRoot(uri) ?: return null
         path.forEach { part -> current = current.findFile(part) ?: return null }
         return current
     }
@@ -76,7 +87,8 @@ class SafBridgeFolder(private val context: Context) {
     companion object {
         private const val PREFS = "applab_bridge_prefs"
         private const val KEY_TREE_URI = "tree_uri"
-        val REQUIRED_DIRS = listOf("config", "inbox", "logs", "results", "apks", "save_codes", "debug_zips")
+        private const val BRIDGE_DIR_NAME = "AppLabBridge"
+        val REQUIRED_DIRS = listOf("config", "inbox", "logs", "results", "apks", "save_codes", "debug_zips", "patches", "reports")
     }
 }
 
