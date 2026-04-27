@@ -20,8 +20,16 @@ data class BridgeResult(
     val branch: String? = null,
     val dirty: Boolean? = null,
     val changedFiles: Int? = null,
+    val stagedFiles: Int? = null,
+    val unstagedFiles: Int? = null,
+    val untrackedFiles: Int? = null,
     val ahead: Int? = null,
-    val behind: Int? = null
+    val behind: Int? = null,
+    val currentCommit: String? = null,
+    val currentCommitMessage: String? = null,
+    val upstream: String? = null,
+    val remoteUrl: String? = null,
+    val hasPatchFile: Boolean? = null
 ) {
     val isLoaded: Boolean get() = runId.isNotBlank()
 
@@ -36,6 +44,23 @@ data class BridgeResult(
             behind != null && behind > 0 -> "behind $behind"
             dirty == false -> "clean"
             else -> "unknown"
+        }
+
+    val changeBreakdownLabel: String
+        get() {
+            val parts = listOfNotNull(
+                stagedFiles?.let { "staged $it" },
+                unstagedFiles?.let { "unstaged $it" },
+                untrackedFiles?.let { "untracked $it" }
+            )
+            return parts.joinToString(" · ").ifBlank { "change details unknown" }
+        }
+
+    val patchLabel: String
+        get() = when (hasPatchFile) {
+            true -> "patch.sh found"
+            false -> "patch.sh missing"
+            null -> "patch state unknown"
         }
 
     fun reportFileName(): String {
@@ -90,8 +115,16 @@ data class BridgeResult(
                     branch = json.optNullableString("branch"),
                     dirty = json.optNullableBoolean("dirty"),
                     changedFiles = json.optNullableInt("changed_files"),
+                    stagedFiles = json.optNullableInt("staged_files"),
+                    unstagedFiles = json.optNullableInt("unstaged_files"),
+                    untrackedFiles = json.optNullableInt("untracked_files"),
                     ahead = json.optNullableInt("ahead"),
-                    behind = json.optNullableInt("behind")
+                    behind = json.optNullableInt("behind"),
+                    currentCommit = json.optNullableString("current_commit"),
+                    currentCommitMessage = json.optNullableString("current_commit_message"),
+                    upstream = json.optNullableString("upstream"),
+                    remoteUrl = json.optNullableString("remote_url"),
+                    hasPatchFile = json.optNullableBoolean("has_patch_file")
                 )
             } catch (error: Exception) {
                 invalidJson(error.message ?: "Could not parse latest_result.json")
