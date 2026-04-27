@@ -185,8 +185,10 @@ fun AppLabBridgeApp() {
                         onRefresh = ::refreshResult,
                         onOpenReport = openReport,
                         onOpenLog = openLog,
-                        onOpenDebugZip = openDebugZip
+                        onOpenDebugZip = openDebugZip,
+                        onRunAction = ::requestAction
                     )
+                    BridgeAppScreen.ADVANCED -> BridgeAdvancedScreen(onRunAction = ::requestAction)
                     BridgeAppScreen.SETUP -> BridgeSetupScreen(
                         onPickFolder = { folderPicker.launch(null) },
                         onRefresh = ::refreshResult,
