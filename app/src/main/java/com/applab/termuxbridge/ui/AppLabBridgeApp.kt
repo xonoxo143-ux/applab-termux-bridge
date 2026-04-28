@@ -329,12 +329,19 @@ fun AppLabBridgeApp() {
                     BridgeAppScreen.HOME -> BridgeHomeScreen(
                         treeUri = treeUri,
                         latestResult = latestResult,
+                        registryState = registryState,
+                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
+                        curationState = curationState,
+                        latestApkName = apkInstaller.latestApkName(treeUri),
                         onPickFolder = { folderPicker.launch(null) },
                         onRefresh = ::refreshResult,
                         onRunAction = ::requestAction,
                         onOpenReport = openReport,
                         onOpenLog = openLog,
-                        onGoTo = { currentScreen = it }
+                        onGoTo = { currentScreen = it },
+                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
+                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
+                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
                     )
                     BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(
                         registryState = registryState,
