@@ -50,6 +50,7 @@ fun AppLabBridgeApp() {
     val bridgeFolder = remember(context) { SafBridgeFolder(context) }
     val resultReader = remember(context) { BridgeResultReader(bridgeFolder) }
     val registryReader = remember(context) { BackendActionRegistryReader(bridgeFolder) }
+    val repoChoiceReader = remember(context) { BridgeRepoChoiceReader(bridgeFolder) }
     val termuxRunner = remember(context) { TermuxRunner(context) }
     val bootstrapper = remember(context) { BackendBootstrapper(context, bridgeFolder) }
     val appLogger = remember(context) { AppBridgeLogger(bridgeFolder) }
@@ -61,6 +62,7 @@ fun AppLabBridgeApp() {
     var treeUri by remember { mutableStateOf(bridgeFolder.savedUri()) }
     var latestResult by remember { mutableStateOf(resultReader.readLatest(treeUri)) }
     var registryState by remember { mutableStateOf<BackendActionRegistryState>(registryReader.read(treeUri)) }
+    var repoChoices by remember { mutableStateOf(repoChoiceReader.readChoices(treeUri)) }
     var curationState by remember { mutableStateOf(curationStore.load()) }
     var statusText by remember { mutableStateOf("Ready") }
     var pollingToken by remember { mutableStateOf(0) }
@@ -199,10 +201,21 @@ fun AppLabBridgeApp() {
     fun refreshResult() {
         appLogger.log(treeUri, "result.reload.before", "oldRunId=${latestResult.runId} oldAction=${latestResult.action}")
         latestResult = resultReader.readLatest(treeUri)
+        repoChoices = repoChoiceReader.readChoices(treeUri)
         previousRunId = latestResult.runId
         pendingCommand = null
         statusText = "Reloaded saved result file."
         appLogger.log(treeUri, "result.reload.after", "newRunId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
+    }
+
+    fun chooseRepo(choice: BridgeRepoChoice) {
+        if (!repoChoiceReader.writeSelectedRepo(treeUri, choice)) {
+            statusText = "Could not write selected repo config. Check shared folder permission."
+            appLogger.log(treeUri, "repo.choose.failed", "choice=${choice.termuxPath}")
+            return
+        }
+        appLogger.log(treeUri, "repo.choose", "choice=${choice.termuxPath}")
+        executeAction(BridgeAction.SELECT_CONFIGURED_REPO)
     }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -212,6 +225,7 @@ fun AppLabBridgeApp() {
             treeUri = uri
             latestResult = resultReader.readLatest(uri)
             registryState = registryReader.read(uri)
+            repoChoices = repoChoiceReader.readChoices(uri)
             previousRunId = latestResult.runId
             pendingCommand = null
             statusText = prep.message
@@ -236,6 +250,7 @@ fun AppLabBridgeApp() {
     LaunchedEffect(treeUri) {
         latestResult = resultReader.readLatest(treeUri)
         registryState = registryReader.read(treeUri)
+        repoChoices = repoChoiceReader.readChoices(treeUri)
         previousRunId = latestResult.runId
         pendingCommand = null
         appLogger.log(treeUri, "app.load", "runId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
@@ -253,6 +268,7 @@ fun AppLabBridgeApp() {
             delay(2_000)
             val result = resultReader.readLatest(treeUri)
             latestResult = result
+            if (result.action == BridgeAction.LIST_PROJECTS.id) repoChoices = repoChoiceReader.readChoices(treeUri)
             appLogger.log(treeUri, "poll.tick", "tick=${index + 1} expected=${expected.expectedActionId} previous=${expected.previousRunId} sawRunId=${result.runId} sawAction=${result.action} sawStatus=${result.status} sawTitle=${result.title}")
             if (result.runId.isNotBlank() && result.runId != expected.previousRunId) {
                 previousRunId = result.runId
@@ -263,6 +279,10 @@ fun AppLabBridgeApp() {
                     if (result.action == BridgeAction.LIST_ACTIONS.id) {
                         registryState = registryReader.read(treeUri)
                         appLogger.log(treeUri, "registry.reload.afterListActions", "state=${registryState::class.java.simpleName}")
+                    }
+                    if (result.action == BridgeAction.LIST_PROJECTS.id) {
+                        repoChoices = repoChoiceReader.readChoices(treeUri)
+                        appLogger.log(treeUri, "repo.choices.reload", "count=${repoChoices.size}")
                     }
                     if (!autoScannedAfterSetup && result.action == BridgeAction.CHECK_SETUP.id && result.status.equals("success", true)) {
                         autoScannedAfterSetup = true
@@ -344,14 +364,11 @@ fun AppLabBridgeApp() {
                         onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
                     )
                     BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(
-                        registryState = registryState,
                         latestResult = latestResult,
-                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        curationState = curationState,
+                        repoChoices = repoChoices,
                         onRunAction = ::requestAction,
-                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
-                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
-                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
+                        onChooseRepo = ::chooseRepo,
+                        onGoTo = { currentScreen = it }
                     )
                     BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(
                         registryState = registryState,
