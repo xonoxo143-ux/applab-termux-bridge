@@ -107,11 +107,16 @@ fun BridgeLatestResultCard(
 @Composable
 fun BridgeRepoWorkbenchScreen(
     registryState: BackendActionRegistryState,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
     onRunAction: (BridgeAction) -> Unit
 ) {
     BridgeRegistryGroupOrFallback(
         registryState = registryState,
         groupName = "Repo Workbench",
+        latestResult = latestResult,
+        hasTermuxPermission = hasTermuxPermission,
+        latestApkName = null,
         title = "Repo Workbench",
         onRunAction = onRunAction
     ) {
@@ -163,6 +168,7 @@ private fun BridgeRepoWorkbenchFallback(onRunAction: (BridgeAction) -> Unit) {
 fun BridgePatchRunnerScreen(
     registryState: BackendActionRegistryState,
     latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
     onRunAction: (BridgeAction) -> Unit
 ) {
     BridgeSectionCard("Patch Readiness") {
@@ -177,6 +183,9 @@ fun BridgePatchRunnerScreen(
     BridgeRegistryGroupOrFallback(
         registryState = registryState,
         groupName = "Patch Runner",
+        latestResult = latestResult,
+        hasTermuxPermission = hasTermuxPermission,
+        latestApkName = null,
         title = "Patch Runner Actions",
         onRunAction = onRunAction
     ) {
@@ -209,6 +218,8 @@ private fun BridgePatchRunnerFallback(latestResult: BridgeResult, onRunAction: (
 @Composable
 fun BridgeApkScreen(
     registryState: BackendActionRegistryState,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
     latestApkName: String?,
     onRunAction: (BridgeAction) -> Unit,
     onInstall: () -> Unit,
@@ -217,6 +228,9 @@ fun BridgeApkScreen(
     BridgeRegistryGroupOrFallback(
         registryState = registryState,
         groupName = "Build / APK",
+        latestResult = latestResult,
+        hasTermuxPermission = hasTermuxPermission,
+        latestApkName = latestApkName,
         title = "Build / APK Actions",
         onRunAction = onRunAction
     ) {
