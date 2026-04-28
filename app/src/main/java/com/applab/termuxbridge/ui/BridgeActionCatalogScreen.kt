@@ -1,6 +1,5 @@
 package com.applab.termuxbridge.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.applab.termuxbridge.actions.BackendActionDescriptor
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
+import com.applab.termuxbridge.bridge.BridgeResult
 
 private enum class CatalogProfile(val label: String) {
     QUICK("Quick"),
@@ -43,13 +43,17 @@ private enum class CatalogProfile(val label: String) {
 @Composable
 fun BridgeActionCatalogScreen(
     registryState: BackendActionRegistryState,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
+    latestApkName: String?,
     onReloadRegistry: () -> Unit,
     onRunBuiltInAction: (BridgeAction) -> Unit
 ) {
     var selectedProfile by remember { mutableStateOf(CatalogProfile.QUICK) }
+    var availabilityFilter by remember { mutableStateOf(ActionAvailabilityFilter.ACTIVE) }
 
     BridgeSectionCard("Action Catalog") {
-        BridgeHintText("Backend-published actions are grouped and collapsed here. Fixed recovery screens remain available if the registry is missing.")
+        BridgeHintText("Backend-published actions are grouped here. Use Active for normal work; use Blocked or All when troubleshooting.")
         BridgeSecondaryButton("Reload Action Registry", onReloadRegistry)
         BridgeActionButton(BridgeAction.LIST_ACTIONS, onRunBuiltInAction)
     }
@@ -73,24 +77,55 @@ fun BridgeActionCatalogScreen(
                 actionCount = registry.actions.size
             )
             BridgeCatalogProfilePicker(selectedProfile) { selectedProfile = it }
+            BridgeSectionCard("Availability") {
+                BridgeAvailabilityFilterPicker(availabilityFilter) { availabilityFilter = it }
+            }
 
             val normalActions = registry.actions.filter { it.visibleByDefault && !it.advanced && !it.parked }
             val advancedActions = registry.actions.filter { !it.visibleByDefault || it.advanced || it.parked }
             val quickActions = quickActionIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id } }
 
             when (selectedProfile) {
-                CatalogProfile.QUICK -> BridgeCompactActionGroup("Quick Actions", quickActions, expandedByDefault = true, onRunBuiltInAction)
-                CatalogProfile.SETUP -> BridgeCatalogGroups(listOf("Setup"), normalActions, onRunBuiltInAction)
-                CatalogProfile.REPO -> BridgeCatalogGroups(listOf("Repo Workbench"), normalActions, onRunBuiltInAction)
-                CatalogProfile.PATCH -> BridgeCatalogGroups(listOf("Patch Runner"), normalActions, onRunBuiltInAction)
-                CatalogProfile.APK -> BridgeCatalogGroups(listOf("Build / APK"), normalActions, onRunBuiltInAction)
-                CatalogProfile.RESULTS -> BridgeCatalogGroups(listOf("Results"), normalActions, onRunBuiltInAction)
-                CatalogProfile.ADVANCED -> BridgeCompactActionGroup("Advanced / Parked Actions", advancedActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }), expandedByDefault = true, onRunBuiltInAction)
+                CatalogProfile.QUICK -> BridgeCompactActionGroup(
+                    group = "Quick Actions",
+                    actions = quickActions,
+                    expandedByDefault = true,
+                    latestResult = latestResult,
+                    hasTermuxPermission = hasTermuxPermission,
+                    latestApkName = latestApkName,
+                    availabilityFilter = availabilityFilter,
+                    onRunBuiltInAction = onRunBuiltInAction
+                )
+                CatalogProfile.SETUP -> BridgeCatalogGroups(listOf("Setup"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
+                CatalogProfile.REPO -> BridgeCatalogGroups(listOf("Repo Workbench"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
+                CatalogProfile.PATCH -> BridgeCatalogGroups(listOf("Patch Runner"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
+                CatalogProfile.APK -> BridgeCatalogGroups(listOf("Build / APK"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
+                CatalogProfile.RESULTS -> BridgeCatalogGroups(listOf("Results"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
+                CatalogProfile.ADVANCED -> BridgeCompactActionGroup(
+                    group = "Advanced / Parked Actions",
+                    actions = advancedActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }),
+                    expandedByDefault = true,
+                    latestResult = latestResult,
+                    hasTermuxPermission = hasTermuxPermission,
+                    latestApkName = latestApkName,
+                    availabilityFilter = ActionAvailabilityFilter.ALL,
+                    onRunBuiltInAction = onRunBuiltInAction,
+                    hideAdvancedParked = false
+                )
                 CatalogProfile.ALL -> {
                     registry.groups.forEach { group ->
                         val groupActions = normalActions.filter { it.group == group }.sortedBy { it.sort }
                         if (groupActions.isNotEmpty()) {
-                            BridgeCompactActionGroup(group, groupActions, expandedByDefault = group == "Setup", onRunBuiltInAction)
+                            BridgeCompactActionGroup(
+                                group = group,
+                                actions = groupActions,
+                                expandedByDefault = group == "Setup",
+                                latestResult = latestResult,
+                                hasTermuxPermission = hasTermuxPermission,
+                                latestApkName = latestApkName,
+                                availabilityFilter = availabilityFilter,
+                                onRunBuiltInAction = onRunBuiltInAction
+                            )
                         }
                     }
                 }
@@ -146,12 +181,25 @@ private fun BridgeCatalogProfilePicker(selected: CatalogProfile, onSelected: (Ca
 private fun BridgeCatalogGroups(
     groupNames: List<String>,
     actions: List<BackendActionDescriptor>,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
+    latestApkName: String?,
+    availabilityFilter: ActionAvailabilityFilter,
     onRunBuiltInAction: (BridgeAction) -> Unit
 ) {
     groupNames.forEach { group ->
         val groupActions = actions.filter { it.group == group }.sortedBy { it.sort }
         if (groupActions.isNotEmpty()) {
-            BridgeCompactActionGroup(group, groupActions, expandedByDefault = true, onRunBuiltInAction)
+            BridgeCompactActionGroup(
+                group = group,
+                actions = groupActions,
+                expandedByDefault = true,
+                latestResult = latestResult,
+                hasTermuxPermission = hasTermuxPermission,
+                latestApkName = latestApkName,
+                availabilityFilter = availabilityFilter,
+                onRunBuiltInAction = onRunBuiltInAction
+            )
         } else {
             BridgeSectionCard(group) { BridgeHintText("No actions found for this group in the current registry.") }
         }
@@ -163,9 +211,29 @@ private fun BridgeCompactActionGroup(
     group: String,
     actions: List<BackendActionDescriptor>,
     expandedByDefault: Boolean,
-    onRunBuiltInAction: (BridgeAction) -> Unit
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
+    latestApkName: String?,
+    availabilityFilter: ActionAvailabilityFilter,
+    onRunBuiltInAction: (BridgeAction) -> Unit,
+    hideAdvancedParked: Boolean = true
 ) {
     var expanded by remember(group) { mutableStateOf(expandedByDefault) }
+    val actionStates = actions.map { descriptor ->
+        descriptor to relevanceForAction(
+            descriptor = descriptor,
+            result = latestResult,
+            hasTermuxPermission = hasTermuxPermission,
+            latestApkName = latestApkName
+        )
+    }.filter { (descriptor, relevance) ->
+        relevance.availability != ActionAvailability.HIDDEN || !hideAdvancedParked || descriptor.advanced || descriptor.parked
+    }
+    val visibleActions = actionStates.filter { (_, relevance) -> actionVisibleForFilter(relevance, availabilityFilter) }
+    val readyCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.READY }
+    val warningCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.WARNING }
+    val blockedCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.BLOCKED }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)),
@@ -175,66 +243,20 @@ private fun BridgeCompactActionGroup(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(group, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("${actions.size} action(s)", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
+                    Text("ready $readyCount · warning $warningCount · blocked $blockedCount", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
                 }
                 OutlinedButton(onClick = { expanded = !expanded }) {
                     Text(if (expanded) "Hide" else "Show", color = Color.White)
                 }
             }
             if (expanded) {
-                actions.forEach { action -> BridgeCompactActionRow(action, onRunBuiltInAction) }
+                if (visibleActions.isEmpty()) {
+                    BridgeHintText("No actions match the current filter.")
+                } else {
+                    visibleActions.forEach { (action, relevance) -> BridgeRegistryActionRow(action, relevance, onRunBuiltInAction) }
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun BridgeCompactActionRow(
-    action: BackendActionDescriptor,
-    onRunBuiltInAction: (BridgeAction) -> Unit
-) {
-    val builtIn = BridgeAction.fromId(action.id)
-    var detailsExpanded by remember(action.id) { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF080D12), RoundedCornerShape(12.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(action.label, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("${action.id} · ${action.risk}", color = BridgeRiskColor(action), fontFamily = FontFamily.Monospace)
-            }
-            if (builtIn != null) {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = bridgeButtonColor(if (action.isRisky) BridgeActionTone.WARNING else BridgeActionTone.PRIMARY)),
-                    onClick = { onRunBuiltInAction(builtIn) }
-                ) { Text("Run") }
-            } else {
-                Text("unsupported", color = Color(0xFFFFD166), fontFamily = FontFamily.Monospace)
-            }
-        }
-        if (action.flags.isNotEmpty()) {
-            Text(action.flags.joinToString(" · "), color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
-        }
-        OutlinedButton(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), onClick = { detailsExpanded = !detailsExpanded }) {
-            Text(if (detailsExpanded) "Hide details" else "Details", color = Color.White)
-        }
-        if (detailsExpanded) {
-            Text(action.description.ifBlank { "No description." }, color = Color(0xFFC7D0DA))
-        }
-    }
-}
-
-private fun BridgeRiskColor(action: BackendActionDescriptor): Color {
-    return when (action.risk) {
-        "safe" -> Color(0xFF5CE38A)
-        "network" -> Color(0xFF9AA4B2)
-        "mutating", "publishing", "install" -> Color(0xFFFFD166)
-        "experimental" -> Color(0xFFFF6B6B)
-        else -> Color(0xFF9AA4B2)
     }
 }
 
