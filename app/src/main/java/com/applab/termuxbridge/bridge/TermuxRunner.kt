@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.applab.termuxbridge.bootstrap.BackendBootstrapper
 
 class TermuxRunner(private val context: Context) {
     fun isTermuxInstalled(): Boolean {
@@ -16,6 +17,32 @@ class TermuxRunner(private val context: Context) {
     }
 
     fun run(action: BridgeAction): RunResult {
+        return runTermuxCommand(
+            path = BRIDGE_PATH,
+            arguments = arrayOf(action.id),
+            label = "AppLab Bridge: ${action.label}",
+            description = "Run approved AppLab bridge action ${action.id}",
+            waitingMessage = "Requested Termux action: ${action.id}. Waiting for results/latest_result.json to update."
+        )
+    }
+
+    fun runBootstrapInstaller(): RunResult {
+        return runTermuxCommand(
+            path = TERMUX_BASH,
+            arguments = arrayOf(BackendBootstrapper.TERMUX_INSTALLER_PATH),
+            label = "AppLab Bridge: Bootstrap Backend",
+            description = "Install or repair the AppLab Termux backend from the shared bootstrap folder.",
+            waitingMessage = "Requested Termux backend bootstrap. Waiting for results/latest_result.json to update."
+        )
+    }
+
+    private fun runTermuxCommand(
+        path: String,
+        arguments: Array<String>,
+        label: String,
+        description: String,
+        waitingMessage: String
+    ): RunResult {
         if (!isTermuxInstalled()) {
             return RunResult(
                 started = false,
@@ -26,19 +53,19 @@ class TermuxRunner(private val context: Context) {
         return try {
             val intent = Intent(TERMUX_RUN_COMMAND_ACTION).apply {
                 setClassName(TERMUX_PACKAGE, TERMUX_RUN_COMMAND_SERVICE)
-                putExtra(EXTRA_PATH, BRIDGE_PATH)
-                putExtra(EXTRA_ARGUMENTS, arrayOf(action.id))
+                putExtra(EXTRA_PATH, path)
+                putExtra(EXTRA_ARGUMENTS, arguments)
                 putExtra(EXTRA_WORKDIR, TERMUX_HOME)
                 putExtra(EXTRA_BACKGROUND, true)
                 putExtra(EXTRA_SESSION_ACTION, "0")
-                putExtra(EXTRA_COMMAND_LABEL, "AppLab Bridge: ${action.label}")
-                putExtra(EXTRA_COMMAND_DESCRIPTION, "Run approved AppLab bridge action ${action.id}")
+                putExtra(EXTRA_COMMAND_LABEL, label)
+                putExtra(EXTRA_COMMAND_DESCRIPTION, description)
             }
             context.startService(intent)
             RunResult(
                 started = true,
                 phase = BridgeCommandPhase.WAITING_FOR_RESULT,
-                message = "Requested Termux action: ${action.id}. Waiting for results/latest_result.json to update."
+                message = waitingMessage
             )
         } catch (_: SecurityException) {
             RunResult(
@@ -66,6 +93,7 @@ class TermuxRunner(private val context: Context) {
         private const val TERMUX_RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"
         private const val TERMUX_RUN_COMMAND_ACTION = "com.termux.RUN_COMMAND"
         private const val BRIDGE_PATH = "/data/data/com.termux/files/home/.termux/applab/bridge_v2.sh"
+        private const val TERMUX_BASH = "/data/data/com.termux/files/usr/bin/bash"
         private const val TERMUX_HOME = "/data/data/com.termux/files/home"
 
         private const val EXTRA_PATH = "com.termux.RUN_COMMAND_PATH"
