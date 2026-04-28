@@ -231,7 +231,7 @@ fun BridgeApkScreen(
         latestResult = latestResult,
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = latestApkName,
-        title = "Build / APK Actions",
+        title = "App Update Actions",
         onRunAction = onRunAction
     ) {
         BridgeApkFallback(onRunAction)
@@ -240,18 +240,18 @@ fun BridgeApkScreen(
         Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
         BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
         BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
-        BridgeHintText("The first stable-signed APK may require uninstalling the old debug-signed app once. Future stable-signed APKs should update normally.")
+        BridgeHintText("If Android says conflicting package, this APK was signed with a different key than the installed app. Uninstall AppLab Bridge once, install the APK from the kept Debug APK workflow, then future APKs from that same workflow should update normally.")
     }
 }
 
 @Composable
 private fun BridgeApkFallback(onRunAction: (BridgeAction) -> Unit) {
     BridgeSectionCard("Check for App Update") {
-        BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact.")
+        BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact. This does not build an APK on the phone.")
         BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
     }
     BridgeSectionCard("Download App Update") {
-        BridgeHintText("Saves the newest GitHub APK artifact to Documents/AppLabBridge/apks.")
+        BridgeHintText("Downloads the newest GitHub APK artifact to Documents/AppLabBridge/apks. Use APKs from the single kept Debug APK workflow to avoid signing conflicts.")
         BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
     }
 }
@@ -289,9 +289,9 @@ fun BridgeSetupScreen(
     onBootstrapBackend: () -> Unit
 ) {
     BridgeSectionCard("Shared Bridge Folder") {
-        BridgePrimaryButton("Choose Shared Bridge Folder", onPickFolder)
+        BridgePrimaryButton("Choose / Switch Shared Bridge Folder", onPickFolder)
         BridgeSecondaryButton("Reload Saved Result File", onRefresh)
-        BridgeHintText("This only rereads results/latest_result.json from the selected bridge folder. It does not run a Termux command.")
+        BridgeHintText("On first launch the app asks for this folder automatically. This button stays here only for manually switching folders later. Pick Documents or AppLabBridge.")
     }
     BridgeSectionCard("Termux Permission") {
         BridgePrimaryButton("Request Termux Command Permission", onRequestTermuxPermission)
