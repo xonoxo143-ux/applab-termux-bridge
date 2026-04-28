@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.applab.termuxbridge.apk.ApkInstaller
+import com.applab.termuxbridge.bootstrap.BackendBootstrapper
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeCommandPhase
 import com.applab.termuxbridge.bridge.BridgePendingCommand
@@ -45,6 +46,7 @@ fun AppLabBridgeApp() {
     val bridgeFolder = remember(context) { SafBridgeFolder(context) }
     val resultReader = remember(context) { BridgeResultReader(bridgeFolder) }
     val termuxRunner = remember(context) { TermuxRunner(context) }
+    val bootstrapper = remember(context) { BackendBootstrapper(context, bridgeFolder) }
     val clipboardBridge = remember(context) { ClipboardBridge(context, bridgeFolder) }
     val apkInstaller = remember(context) { ApkInstaller(context, bridgeFolder) }
     val fileOpener = remember(context) { SharedFileOpener(context, bridgeFolder) }
@@ -58,16 +60,34 @@ fun AppLabBridgeApp() {
     var pendingAction by remember { mutableStateOf<BridgeAction?>(null) }
     var pendingCommand by remember { mutableStateOf<BridgePendingCommand?>(null) }
 
+    fun startPolling(action: BridgeAction, phase: BridgeCommandPhase = BridgeCommandPhase.WAITING_FOR_RESULT) {
+        pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = phase)
+        previousRunId = latestResult.runId
+        pollingToken += 1
+    }
+
     fun executeAction(action: BridgeAction) {
         pendingAction = null
         val runResult = termuxRunner.run(action)
         statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
         if (runResult.started) {
-            pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = runResult.phase)
-            previousRunId = latestResult.runId
-            pollingToken += 1
+            startPolling(action, runResult.phase)
         } else {
             pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
+        }
+    }
+
+    fun runBackendBootstrap() {
+        pendingAction = null
+        val writeResult = bootstrapper.writeBootstrapFiles(treeUri)
+        statusText = writeResult.message
+        if (!writeResult.success) return
+        val runResult = termuxRunner.runBootstrapInstaller()
+        statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
+        if (runResult.started) {
+            startPolling(BridgeAction.CHECK_SETUP, runResult.phase)
+        } else {
+            pendingCommand = BridgePendingCommand(action = BridgeAction.CHECK_SETUP, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
         }
     }
 
@@ -200,7 +220,8 @@ fun AppLabBridgeApp() {
                         onRefresh = ::refreshResult,
                         onRunAction = ::requestAction,
                         onOpenSettings = { openAppSettings(context) },
-                        onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message }
+                        onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message },
+                        onBootstrapBackend = ::runBackendBootstrap
                     )
                 }
             }
