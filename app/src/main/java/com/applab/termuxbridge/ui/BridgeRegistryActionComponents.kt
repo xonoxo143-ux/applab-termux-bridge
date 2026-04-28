@@ -21,11 +21,15 @@ import androidx.compose.ui.unit.dp
 import com.applab.termuxbridge.actions.BackendActionDescriptor
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
+import com.applab.termuxbridge.bridge.BridgeResult
 
 @Composable
 fun BridgeRegistryGroupOrFallback(
     registryState: BackendActionRegistryState,
     groupName: String,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
+    latestApkName: String?,
     title: String = groupName,
     fallbackReason: String = "Backend action registry is missing, incomplete, or has no actions for this group. Showing fixed fallback controls.",
     onRunAction: (BridgeAction) -> Unit,
@@ -46,10 +50,19 @@ fun BridgeRegistryGroupOrFallback(
         return
     }
 
+    val relevantActions = actions.map { descriptor ->
+        descriptor to relevanceForAction(
+            descriptor = descriptor,
+            result = latestResult,
+            hasTermuxPermission = hasTermuxPermission,
+            latestApkName = latestApkName
+        )
+    }.filter { (_, relevance) -> relevance.availability != ActionAvailability.HIDDEN }
+
     BridgeSectionCard(title) {
-        BridgeHintText("Registry-driven actions from config/actions.json. Fixed recovery screens remain available if the registry is unavailable.")
-        actions.forEach { descriptor ->
-            BridgeRegistryActionRow(descriptor, onRunAction)
+        BridgeHintText("Registry-driven actions from config/actions.json. Rows now show ready, warning, or blocked state.")
+        relevantActions.forEach { (descriptor, relevance) ->
+            BridgeRegistryActionRow(descriptor, relevance, onRunAction)
         }
     }
 }
@@ -57,31 +70,40 @@ fun BridgeRegistryGroupOrFallback(
 @Composable
 fun BridgeRegistryActionRow(
     descriptor: BackendActionDescriptor,
+    relevance: ActionRelevance,
     onRunAction: (BridgeAction) -> Unit
 ) {
     val builtIn = BridgeAction.fromId(descriptor.id)
+    val rowColor = when (relevance.availability) {
+        ActionAvailability.READY -> Color(0xFF080D12)
+        ActionAvailability.WARNING -> Color(0xFF1F1707)
+        ActionAvailability.BLOCKED -> Color(0xFF161A20)
+        ActionAvailability.HIDDEN -> Color(0xFF080D12)
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF080D12), RoundedCornerShape(12.dp))
+            .background(rowColor, RoundedCornerShape(12.dp))
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(descriptor.label, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("${descriptor.id} · ${descriptor.risk}", color = registryRiskColor(descriptor), fontFamily = FontFamily.Monospace)
+                Text("${descriptor.id} · ${descriptor.risk} · ${actionAvailabilityLabel(relevance)}", color = registryRiskColor(descriptor, relevance), fontFamily = FontFamily.Monospace)
             }
             if (builtIn != null) {
                 Button(
                     modifier = Modifier.heightIn(min = 40.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = bridgeButtonColor(if (descriptor.isRisky) BridgeActionTone.WARNING else BridgeActionTone.PRIMARY)),
+                    enabled = relevance.canRun,
+                    colors = ButtonDefaults.buttonColors(containerColor = bridgeButtonColor(relevance.tone)),
                     onClick = { onRunAction(builtIn) }
-                ) { Text("Run") }
+                ) { Text(if (relevance.canRun) "Run" else "Blocked") }
             } else {
                 Text("unsupported", color = Color(0xFFFFD166), fontFamily = FontFamily.Monospace)
             }
         }
+        Text(relevance.reason, color = availabilityColor(relevance), fontFamily = FontFamily.Monospace)
         if (descriptor.flags.isNotEmpty()) {
             Text(descriptor.flags.joinToString(" · "), color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
         }
@@ -91,12 +113,22 @@ fun BridgeRegistryActionRow(
     }
 }
 
-private fun registryRiskColor(action: BackendActionDescriptor): Color {
+private fun registryRiskColor(action: BackendActionDescriptor, relevance: ActionRelevance): Color {
+    if (relevance.availability == ActionAvailability.BLOCKED) return Color(0xFFFF6B6B)
     return when (action.risk) {
         "safe" -> Color(0xFF5CE38A)
         "network" -> Color(0xFF9AA4B2)
         "mutating", "publishing", "install" -> Color(0xFFFFD166)
         "experimental" -> Color(0xFFFF6B6B)
         else -> Color(0xFF9AA4B2)
+    }
+}
+
+private fun availabilityColor(relevance: ActionRelevance): Color {
+    return when (relevance.availability) {
+        ActionAvailability.READY -> Color(0xFF5CE38A)
+        ActionAvailability.WARNING -> Color(0xFFFFD166)
+        ActionAvailability.BLOCKED -> Color(0xFFFF6B6B)
+        ActionAvailability.HIDDEN -> Color(0xFF9AA4B2)
     }
 }
