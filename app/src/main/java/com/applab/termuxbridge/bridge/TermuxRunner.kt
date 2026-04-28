@@ -1,9 +1,11 @@
 package com.applab.termuxbridge.bridge
 
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import java.util.concurrent.atomic.AtomicInteger
 
 class TermuxRunner(private val context: Context) {
     fun isTermuxInstalled(): Boolean {
@@ -21,6 +23,7 @@ class TermuxRunner(private val context: Context) {
 
     fun run(action: BridgeAction): RunResult {
         return runTermuxCommand(
+            expectedAction = action.id,
             path = BRIDGE_PATH,
             arguments = arrayOf(action.id),
             stdin = null,
@@ -32,6 +35,7 @@ class TermuxRunner(private val context: Context) {
 
     fun runBootstrapInstaller(scriptText: String): RunResult {
         return runTermuxCommand(
+            expectedAction = BridgeAction.CHECK_SETUP.id,
             path = TERMUX_BASH,
             arguments = emptyArray(),
             stdin = scriptText,
@@ -42,6 +46,7 @@ class TermuxRunner(private val context: Context) {
     }
 
     private fun runTermuxCommand(
+        expectedAction: String,
         path: String,
         arguments: Array<String>,
         stdin: String?,
@@ -49,6 +54,7 @@ class TermuxRunner(private val context: Context) {
         description: String,
         waitingMessage: String
     ): RunResult {
+        val executionId = executionCounter.incrementAndGet()
         val termuxInstalled = isTermuxInstalled()
         val runPermission = hasRunCommandPermission()
         if (!termuxInstalled) {
@@ -56,6 +62,7 @@ class TermuxRunner(private val context: Context) {
                 started = false,
                 phase = BridgeCommandPhase.LAUNCH_FAILED,
                 message = "Termux is not installed or is not visible to this app. Install Termux or allow package visibility.",
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 termuxInstalled = false,
@@ -67,6 +74,7 @@ class TermuxRunner(private val context: Context) {
                 started = false,
                 phase = BridgeCommandPhase.LAUNCH_FAILED,
                 message = "AppLab Bridge does not have Termux RUN_COMMAND permission. Open this app's permissions and allow Run commands in Termux.",
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 termuxInstalled = true,
@@ -74,6 +82,16 @@ class TermuxRunner(private val context: Context) {
             )
         }
         return try {
+            val resultIntent = Intent(context, TermuxResultService::class.java).apply {
+                putExtra(TermuxResultService.EXTRA_EXECUTION_ID, executionId)
+                putExtra(TermuxResultService.EXTRA_EXPECTED_ACTION, expectedAction)
+            }
+            val resultPendingIntent = PendingIntent.getService(
+                context,
+                executionId,
+                resultIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            )
             val intent = Intent(TERMUX_RUN_COMMAND_ACTION).apply {
                 setClassName(TERMUX_PACKAGE, TERMUX_RUN_COMMAND_SERVICE)
                 putExtra(EXTRA_PATH, path)
@@ -84,12 +102,14 @@ class TermuxRunner(private val context: Context) {
                 putExtra(EXTRA_SESSION_ACTION, "0")
                 putExtra(EXTRA_COMMAND_LABEL, label)
                 putExtra(EXTRA_COMMAND_DESCRIPTION, description)
+                putExtra(TermuxResultService.EXTRA_PENDING_INTENT, resultPendingIntent)
             }
             context.startService(intent)
             RunResult(
                 started = true,
                 phase = BridgeCommandPhase.WAITING_FOR_RESULT,
                 message = waitingMessage,
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 stdinBytes = stdin?.toByteArray()?.size ?: 0,
@@ -101,6 +121,7 @@ class TermuxRunner(private val context: Context) {
                 started = false,
                 phase = BridgeCommandPhase.LAUNCH_FAILED,
                 message = "Permission denied by Android while starting Termux. Reopen this app's permissions and verify Run commands in Termux is allowed.",
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 stdinBytes = stdin?.toByteArray()?.size ?: 0,
@@ -112,6 +133,7 @@ class TermuxRunner(private val context: Context) {
                 started = false,
                 phase = BridgeCommandPhase.LAUNCH_FAILED,
                 message = "Termux RunCommandService was not found. Check Termux version and installation source.",
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 stdinBytes = stdin?.toByteArray()?.size ?: 0,
@@ -123,6 +145,7 @@ class TermuxRunner(private val context: Context) {
                 started = false,
                 phase = BridgeCommandPhase.LAUNCH_FAILED,
                 message = "Failed to start Termux action: ${error.message ?: error::class.java.simpleName}",
+                executionId = executionId,
                 commandPath = path,
                 arguments = arguments.toList(),
                 stdinBytes = stdin?.toByteArray()?.size ?: 0,
@@ -149,6 +172,8 @@ class TermuxRunner(private val context: Context) {
         private const val EXTRA_SESSION_ACTION = "com.termux.RUN_COMMAND_SESSION_ACTION"
         private const val EXTRA_COMMAND_LABEL = "com.termux.RUN_COMMAND_COMMAND_LABEL"
         private const val EXTRA_COMMAND_DESCRIPTION = "com.termux.RUN_COMMAND_COMMAND_DESCRIPTION"
+
+        private val executionCounter = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
     }
 }
 
@@ -156,6 +181,7 @@ data class RunResult(
     val started: Boolean,
     val phase: BridgeCommandPhase,
     val message: String,
+    val executionId: Int = 0,
     val commandPath: String = "",
     val arguments: List<String> = emptyList(),
     val stdinBytes: Int = 0,
