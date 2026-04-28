@@ -355,6 +355,9 @@ fun AppLabBridgeApp() {
                     )
                     BridgeAppScreen.ACTION_CATALOG -> BridgeActionCatalogScreen(
                         registryState = registryState,
+                        latestResult = latestResult,
+                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
+                        latestApkName = apkInstaller.latestApkName(treeUri),
                         onReloadRegistry = ::reloadRegistry,
                         onRunBuiltInAction = ::requestAction
                     )
