@@ -79,7 +79,7 @@ fun BridgeAppHeader(
                 Text("☰ Menu", color = Color.White)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                BridgeAppScreen.entries.forEach { screen ->
+                primaryNavigationScreens.forEach { screen ->
                     DropdownMenuItem(
                         text = { Text(screen.title) },
                         onClick = {
@@ -88,10 +88,27 @@ fun BridgeAppHeader(
                         }
                     )
                 }
+                DropdownMenuItem(
+                    text = { Text("Patch") },
+                    onClick = {
+                        menuOpen = false
+                        onScreenSelected(BridgeAppScreen.PATCH)
+                    }
+                )
             }
         }
     }
 }
+
+private val primaryNavigationScreens = listOf(
+    BridgeAppScreen.HOME,
+    BridgeAppScreen.SETUP,
+    BridgeAppScreen.REPO,
+    BridgeAppScreen.ACTION_CATALOG,
+    BridgeAppScreen.RESULTS,
+    BridgeAppScreen.APK,
+    BridgeAppScreen.ADVANCED
+)
 
 @Composable
 fun BridgeStatusPanel(
@@ -100,12 +117,12 @@ fun BridgeStatusPanel(
     result: BridgeResult,
     pendingCommand: BridgePendingCommand?
 ) {
-    val folderText = if (treeUri == null) "Folder: not selected" else "Folder: Documents/AppLabBridge selected"
+    val folderText = if (treeUri == null) "Folder: not selected" else "Folder: selected"
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101821)),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(status, color = Color.White, fontWeight = FontWeight.Bold)
             pendingCommand?.let { command ->
                 Text(
@@ -122,15 +139,8 @@ fun BridgeStatusPanel(
                     )
                 }
             }
-            Text(folderText, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
-            Text(result.repoLabel, color = bridgeRepoStateColor(result), style = MaterialTheme.typography.bodyMedium)
-            Text(result.stateLabel, color = bridgeRepoStateColor(result), style = MaterialTheme.typography.bodySmall)
-            Text(result.changeBreakdownLabel, color = Color(0xFF9AA4B2), style = MaterialTheme.typography.bodySmall)
-            Text(
-                text = "Last: ${result.status.uppercase()} — ${result.title}",
-                color = bridgeStatusColor(result.status),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text("$folderText · ${result.repoLabel} · ${result.stateLabel}", color = bridgeRepoStateColor(result), style = MaterialTheme.typography.bodySmall)
+            Text("Last: ${result.status.uppercase()} — ${result.title}", color = bridgeStatusColor(result.status), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
