@@ -56,10 +56,12 @@ fun AppLabBridgeApp() {
     val clipboardBridge = remember(context) { ClipboardBridge(context, bridgeFolder) }
     val apkInstaller = remember(context) { ApkInstaller(context, bridgeFolder) }
     val fileOpener = remember(context) { SharedFileOpener(context, bridgeFolder) }
+    val curationStore = remember(context) { BridgeActionCurationStore(context) }
 
     var treeUri by remember { mutableStateOf(bridgeFolder.savedUri()) }
     var latestResult by remember { mutableStateOf(resultReader.readLatest(treeUri)) }
     var registryState by remember { mutableStateOf<BackendActionRegistryState>(registryReader.read(treeUri)) }
+    var curationState by remember { mutableStateOf(curationStore.load()) }
     var statusText by remember { mutableStateOf("Ready") }
     var pollingToken by remember { mutableStateOf(0) }
     var previousRunId by remember { mutableStateOf(latestResult.runId) }
@@ -69,6 +71,19 @@ fun AppLabBridgeApp() {
     var folderPrompted by remember { mutableStateOf(false) }
     var permissionPrompted by remember { mutableStateOf(false) }
     var autoScannedAfterSetup by remember { mutableStateOf(false) }
+
+    fun updateCuration(next: ActionCurationState, event: String, actionId: String = "") {
+        curationState = next
+        appLogger.log(treeUri, event, "actionId=$actionId pinned=${next.pinnedIds.size} hidden=${next.hiddenIds.size} customize=${next.customizeMode}")
+        statusText = when (event) {
+            "action.pin.toggle" -> if (next.isPinned(actionId)) "Pinned $actionId." else "Unpinned $actionId."
+            "action.hidden" -> "Hidden $actionId from normal views."
+            "action.unhidden" -> "Unhid $actionId."
+            "action.customize" -> if (next.customizeMode) "Customize Actions enabled." else "Customize Actions disabled."
+            "action.layout.reset" -> "Action layout reset."
+            else -> "Action curation updated."
+        }
+    }
 
     val termuxPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         statusText = if (granted) {
@@ -325,20 +340,32 @@ fun AppLabBridgeApp() {
                         registryState = registryState,
                         latestResult = latestResult,
                         hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        onRunAction = ::requestAction
+                        curationState = curationState,
+                        onRunAction = ::requestAction,
+                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
+                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
+                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
                     )
                     BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(
                         registryState = registryState,
                         latestResult = latestResult,
                         hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        onRunAction = ::requestAction
+                        curationState = curationState,
+                        onRunAction = ::requestAction,
+                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
+                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
+                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
                     )
                     BridgeAppScreen.APK -> BridgeApkScreen(
                         registryState = registryState,
                         latestResult = latestResult,
                         hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
+                        curationState = curationState,
                         latestApkName = apkInstaller.latestApkName(treeUri),
                         onRunAction = ::requestAction,
+                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
+                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
+                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) },
                         onInstall = {
                             appLogger.log(treeUri, "apk.install", "latest=${apkInstaller.latestApkName(treeUri)}")
                             statusText = apkInstaller.installLatest(treeUri).message
@@ -358,8 +385,14 @@ fun AppLabBridgeApp() {
                         latestResult = latestResult,
                         hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
                         latestApkName = apkInstaller.latestApkName(treeUri),
+                        curationState = curationState,
                         onReloadRegistry = ::reloadRegistry,
-                        onRunBuiltInAction = ::requestAction
+                        onRunBuiltInAction = ::requestAction,
+                        onSetCustomizeMode = { enabled -> updateCuration(curationStore.setCustomizeMode(enabled), "action.customize") },
+                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
+                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
+                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) },
+                        onResetLayout = { updateCuration(curationStore.reset(), "action.layout.reset") }
                     )
                     BridgeAppScreen.ADVANCED -> BridgeAdvancedScreen(onRunAction = ::requestAction)
                     BridgeAppScreen.SETUP -> BridgeSetupScreen(
