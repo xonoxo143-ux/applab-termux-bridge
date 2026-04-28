@@ -57,6 +57,7 @@ fun BridgeDashboardRepoSummary(
     onRunAction: (BridgeAction) -> Unit,
     onGoTo: (BridgeAppScreen) -> Unit
 ) {
+    val hasRepo = latestResult.repoName != null || latestResult.branch != null
     BridgeSectionCard("Repo") {
         BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
         BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
@@ -67,12 +68,15 @@ fun BridgeDashboardRepoSummary(
                 modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
                 onClick = { onGoTo(BridgeAppScreen.REPO) }
-            ) { Text("Open Repo") }
+            ) { Text(if (hasRepo) "Open Repo" else "Select Repo") }
             Button(
                 modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
-                onClick = { onRunAction(BridgeAction.SHOW_STATUS) }
-            ) { Text("Status") }
+                onClick = { onRunAction(if (hasRepo) BridgeAction.SHOW_STATUS else BridgeAction.LIST_PROJECTS) }
+            ) { Text(if (hasRepo) "Status" else "Scan") }
+        }
+        if (!hasRepo) {
+            BridgeHintText("No active repo is selected yet. Scan projects or open Repo to choose one before checking status.")
         }
     }
 }
