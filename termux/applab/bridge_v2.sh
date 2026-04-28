@@ -64,7 +64,7 @@ active_repo() {
 need_repo() {
   REPO="$(active_repo || true)"
   if [ -z "${REPO:-}" ]; then
-    write_result "failed" "No selected repo" "No active repo was found." 1 "" "Select a repo first, or clone one under ~/projects."
+    write_result "failed" "No selected repo" "No active repo was found." 1 "" "Choose a repo first, or clone one under ~/projects."
     exit 1
   fi
   cd "$REPO" || exit 1
@@ -135,7 +135,7 @@ case "$ACTION" in
     CODE=$?
     cat "$REPORT_FILE" > "$LOG_FILE" 2>/dev/null || true
     if [ "$CODE" -eq 0 ]; then
-      write_result "success" "Actions listed" "Action registry written to config/actions.json." "$CODE" "$REPORT_FILE" "Phase 1 registry is available. Android can read config/actions.json in a later phase."
+      write_result "success" "Actions listed" "Action registry written to config/actions.json." "$CODE" "$REPORT_FILE" "Android can read config/actions.json."
     else
       write_result "failed" "Action registry failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE" "Open list_actions report and check JSON generation."
     fi
@@ -175,8 +175,39 @@ case "$ACTION" in
     REPORT_FILE="$REPORTS_DIR/list_projects.txt"
     { echo "Projects under $PROJECTS_DIR"; echo; cd "$PROJECTS_DIR" || exit 1; find . -maxdepth 2 -name .git -type d | sed 's#^./##; s#/.git$##' | sort; } > "$REPORT_FILE" 2>&1
     CODE=$?; cat "$REPORT_FILE" > "$LOG_FILE"
-    if [ "$CODE" -eq 0 ]; then write_result "success" "Projects listed" "Project list report written." "$CODE" "$REPORT_FILE" ""; else write_result "failed" "Could not list projects" "See report/log." "$CODE" "$REPORT_FILE" "Confirm ~/projects exists and Termux storage is set up."; fi
+    if [ "$CODE" -eq 0 ]; then write_result "success" "Repos found" "Repo list report written." "$CODE" "$REPORT_FILE" "Choose a repo from the Android Repo screen."; else write_result "failed" "Could not list repos" "See report/log." "$CODE" "$REPORT_FILE" "Confirm ~/projects exists and Termux storage is set up."; fi
     exit "$CODE"
+    ;;
+
+  select_configured_repo)
+    SELECTED_FILE="$CONFIG_DIR/selected_repo.txt"
+    REPORT_FILE="$REPORTS_DIR/select_configured_repo.txt"
+    if [ ! -f "$SELECTED_FILE" ]; then
+      write_result "failed" "No repo chosen" "Android has not written config/selected_repo.txt yet." 1 "" "Tap Find Repos, then choose a repo from the Repo screen."
+      exit 1
+    fi
+    TARGET="$(cat "$SELECTED_FILE" | head -n 1)"
+    if [ -z "$TARGET" ] || [ ! -d "$TARGET/.git" ]; then
+      write_result "failed" "Chosen repo unavailable" "Chosen repo is missing or is not a git repo: $TARGET" 1 "" "Run Find Repos again, then choose an existing repo."
+      exit 1
+    fi
+    printf '%s\n' "$TARGET" > "$CONFIG_DIR/active_repo.txt"
+    {
+      echo "Active repo set to:"
+      cat "$CONFIG_DIR/active_repo.txt"
+      echo
+      cd "$TARGET" || exit 1
+      git branch --show-current
+      git status --short
+    } > "$REPORT_FILE" 2>&1
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE"
+    cd "$TARGET" || exit 1
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "Repo selected" "Selected $(basename "$TARGET")." 0 "$REPORT_FILE" "Check Repo next."
+    else
+      write_result "failed" "Repo selection failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE" "Open the repo selection report."
+    fi
     ;;
 
   set_active_bridge)
