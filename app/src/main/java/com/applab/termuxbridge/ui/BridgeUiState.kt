@@ -9,7 +9,7 @@ enum class BridgeAppScreen(val title: String) {
     HOME("Home"),
     REPO("Repo Workbench"),
     PATCH("Patch Runner"),
-    APK("Build / APK"),
+    APK("App Updates"),
     RESULTS("Results"),
     ACTION_CATALOG("Action Catalog"),
     ADVANCED("Advanced Tools"),
@@ -60,7 +60,7 @@ fun bridgeRecommendedAction(treeUri: Uri?, result: BridgeResult): BridgeRecommen
         )
     }
     if (result.action == "download_latest_apk") {
-        return BridgeRecommendedAction("Install the downloaded APK", "The latest APK should now be in the shared bridge folder.", "Open Build / APK", screen = BridgeAppScreen.APK)
+        return BridgeRecommendedAction("Install the downloaded APK", "The latest APK should now be in the shared bridge folder.", "Open App Updates", screen = BridgeAppScreen.APK)
     }
     if (result.action == "list_actions") {
         return BridgeRecommendedAction("Open Action Catalog", "The backend action registry was written. Reload the catalog to view it.", "Open Action Catalog", screen = BridgeAppScreen.ACTION_CATALOG)
