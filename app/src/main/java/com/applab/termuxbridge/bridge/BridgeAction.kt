@@ -7,6 +7,7 @@ enum class BridgeAction(
     val expectedReportName: String
 ) {
     CHECK_SETUP("check_setup", "Run Termux Setup Check", BridgeSection.SETUP, "check_setup.txt"),
+    LIST_ACTIONS("list_actions", "List Backend Actions", BridgeSection.SETUP, "list_actions.txt"),
     UPDATE_DISPATCHER("update_dispatcher", "Update Termux Dispatcher", BridgeSection.SETUP, "update_dispatcher.txt"),
 
     LIST_PROJECTS("list_projects", "Scan ~/projects for Repos", BridgeSection.REPO, "list_projects.txt"),
