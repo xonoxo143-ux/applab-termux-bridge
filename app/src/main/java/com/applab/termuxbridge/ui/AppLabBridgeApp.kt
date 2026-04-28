@@ -33,9 +33,11 @@ import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeCommandPhase
 import com.applab.termuxbridge.bridge.BridgePendingCommand
 import com.applab.termuxbridge.bridge.BridgeResultReader
+import com.applab.termuxbridge.bridge.RunResult
 import com.applab.termuxbridge.bridge.TermuxRunner
 import com.applab.termuxbridge.bridge.userLabel
 import com.applab.termuxbridge.clipboard.ClipboardBridge
+import com.applab.termuxbridge.diagnostics.AppBridgeLogger
 import com.applab.termuxbridge.storage.SafBridgeFolder
 import com.applab.termuxbridge.storage.SharedFileOpener
 import kotlinx.coroutines.delay
@@ -47,6 +49,7 @@ fun AppLabBridgeApp() {
     val resultReader = remember(context) { BridgeResultReader(bridgeFolder) }
     val termuxRunner = remember(context) { TermuxRunner(context) }
     val bootstrapper = remember(context) { BackendBootstrapper(context, bridgeFolder) }
+    val appLogger = remember(context) { AppBridgeLogger(bridgeFolder) }
     val clipboardBridge = remember(context) { ClipboardBridge(context, bridgeFolder) }
     val apkInstaller = remember(context) { ApkInstaller(context, bridgeFolder) }
     val fileOpener = remember(context) { SharedFileOpener(context, bridgeFolder) }
@@ -60,7 +63,16 @@ fun AppLabBridgeApp() {
     var pendingAction by remember { mutableStateOf<BridgeAction?>(null) }
     var pendingCommand by remember { mutableStateOf<BridgePendingCommand?>(null) }
 
+    fun logRunResult(prefix: String, result: RunResult) {
+        appLogger.log(
+            treeUri,
+            prefix,
+            "started=${result.started} phase=${result.phase} path=${result.commandPath} args=${result.arguments.joinToString(",")} stdinBytes=${result.stdinBytes} termuxInstalled=${result.termuxInstalled} runPermission=${result.runCommandPermission} message=${result.message}"
+        )
+    }
+
     fun startPolling(action: BridgeAction, phase: BridgeCommandPhase = BridgeCommandPhase.WAITING_FOR_RESULT) {
+        appLogger.log(treeUri, "poll.start", "expected=${action.id} previousRunId=${latestResult.runId} phase=$phase")
         pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = phase)
         previousRunId = latestResult.runId
         pollingToken += 1
@@ -68,7 +80,9 @@ fun AppLabBridgeApp() {
 
     fun executeAction(action: BridgeAction) {
         pendingAction = null
+        appLogger.log(treeUri, "action.tap", "action=${action.id} label=${action.label}")
         val runResult = termuxRunner.run(action)
+        logRunResult("termux.launch", runResult)
         statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
         if (runResult.started) {
             startPolling(action, runResult.phase)
@@ -79,10 +93,19 @@ fun AppLabBridgeApp() {
 
     fun runBackendBootstrap() {
         pendingAction = null
+        appLogger.log(treeUri, "bootstrap.tap", "uriSelected=${treeUri != null}")
         val writeResult = bootstrapper.writeBootstrapFiles(treeUri)
+        appLogger.log(treeUri, "bootstrap.write", "success=${writeResult.success} message=${writeResult.message}")
         statusText = writeResult.message
         if (!writeResult.success) return
-        val runResult = termuxRunner.runBootstrapInstaller()
+        val script = bootstrapper.bootstrapScriptText()
+        appLogger.log(treeUri, "bootstrap.script", "success=${script.success} bytes=${script.text.toByteArray().size} message=${script.message}")
+        if (!script.success) {
+            statusText = script.message
+            return
+        }
+        val runResult = termuxRunner.runBootstrapInstaller(script.text)
+        logRunResult("bootstrap.launch", runResult)
         statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
         if (runResult.started) {
             startPolling(BridgeAction.CHECK_SETUP, runResult.phase)
@@ -92,6 +115,7 @@ fun AppLabBridgeApp() {
     }
 
     fun requestAction(action: BridgeAction) {
+        appLogger.log(treeUri, "action.request", "action=${action.id} requiresConfirmation=${bridgeRequiresConfirmation(action)}")
         if (bridgeRequiresConfirmation(action)) {
             pendingAction = action
             statusText = "Confirm ${action.label} before running."
@@ -101,10 +125,12 @@ fun AppLabBridgeApp() {
     }
 
     fun refreshResult() {
+        appLogger.log(treeUri, "result.reload.before", "oldRunId=${latestResult.runId} oldAction=${latestResult.action}")
         latestResult = resultReader.readLatest(treeUri)
         previousRunId = latestResult.runId
         pendingCommand = null
         statusText = "Reloaded saved result file."
+        appLogger.log(treeUri, "result.reload.after", "newRunId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
     }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -116,6 +142,7 @@ fun AppLabBridgeApp() {
             previousRunId = latestResult.runId
             pendingCommand = null
             statusText = prep.message
+            appLogger.log(uri, "folder.selected", "prepSuccess=${prep.success} message=${prep.message} runId=${latestResult.runId} action=${latestResult.action}")
         }
     }
 
@@ -123,38 +150,46 @@ fun AppLabBridgeApp() {
         latestResult = resultReader.readLatest(treeUri)
         previousRunId = latestResult.runId
         pendingCommand = null
+        appLogger.log(treeUri, "app.load", "runId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
     }
 
     LaunchedEffect(pollingToken) {
         val expected = pendingCommand ?: return@LaunchedEffect
         if (pollingToken == 0) return@LaunchedEffect
-        repeat(15) {
+        repeat(15) { index ->
             delay(2_000)
             val result = resultReader.readLatest(treeUri)
             latestResult = result
+            appLogger.log(treeUri, "poll.tick", "tick=${index + 1} expected=${expected.expectedActionId} previous=${expected.previousRunId} sawRunId=${result.runId} sawAction=${result.action} sawStatus=${result.status} sawTitle=${result.title}")
             if (result.runId.isNotBlank() && result.runId != expected.previousRunId) {
                 previousRunId = result.runId
                 if (result.action == expected.expectedActionId) {
                     pendingCommand = expected.copy(phase = BridgeCommandPhase.RESULT_RECEIVED)
                     statusText = "Result received: ${result.title}"
+                    appLogger.log(treeUri, "poll.result", "matched=true runId=${result.runId} action=${result.action} status=${result.status}")
                 } else {
                     pendingCommand = expected.copy(phase = BridgeCommandPhase.RESULT_MISMATCH)
                     statusText = "Different result received. Expected ${expected.expectedActionId}, saw ${result.action.ifBlank { "unknown" }}."
+                    appLogger.log(treeUri, "poll.result", "matched=false expected=${expected.expectedActionId} saw=${result.action} runId=${result.runId}")
                 }
                 return@LaunchedEffect
             }
         }
         pendingCommand = expected.copy(phase = BridgeCommandPhase.TIMED_OUT)
         statusText = "Timed out waiting for ${expected.expectedActionId}. Termux may not have launched, the dispatcher may have failed early, or the selected shared folder may not match Termux storage."
+        appLogger.log(treeUri, "poll.timeout", "expected=${expected.expectedActionId} previousRunId=${expected.previousRunId}")
     }
 
     val openReport = {
+        appLogger.log(treeUri, "open.report", "report=${latestResult.reportFileName()}")
         statusText = if (fileOpener.openReport(treeUri, latestResult.reportFileName())) "Opened last action report." else "Report file not found."
     }
     val openLog = {
+        appLogger.log(treeUri, "open.log", "newest=true")
         statusText = if (fileOpener.openNewestLog(treeUri)) "Opened latest log file." else "Log file not found."
     }
     val openDebugZip = {
+        appLogger.log(treeUri, "open.debugZip", "newest=true")
         statusText = if (fileOpener.openDebugZip(treeUri)) "Opened latest debug zip." else "Debug zip not found."
     }
 
@@ -184,6 +219,7 @@ fun AppLabBridgeApp() {
                         onCancel = {
                             pendingAction = null
                             statusText = "Action cancelled."
+                            appLogger.log(treeUri, "action.cancel", "action=${action.id}")
                         }
                     )
                 }
@@ -203,7 +239,10 @@ fun AppLabBridgeApp() {
                     BridgeAppScreen.APK -> BridgeApkScreen(
                         latestApkName = apkInstaller.latestApkName(treeUri),
                         onRunAction = ::requestAction,
-                        onInstall = { statusText = apkInstaller.installLatest(treeUri).message },
+                        onInstall = {
+                            appLogger.log(treeUri, "apk.install", "latest=${apkInstaller.latestApkName(treeUri)}")
+                            statusText = apkInstaller.installLatest(treeUri).message
+                        },
                         onInstallSettings = { apkInstaller.openInstallSettings() }
                     )
                     BridgeAppScreen.RESULTS -> BridgeResultsScreen(
@@ -220,7 +259,10 @@ fun AppLabBridgeApp() {
                         onRefresh = ::refreshResult,
                         onRunAction = ::requestAction,
                         onOpenSettings = { openAppSettings(context) },
-                        onClipboard = { statusText = clipboardBridge.writeClipboardSave(treeUri).message },
+                        onClipboard = {
+                            appLogger.log(treeUri, "clipboard.save", "requested=true")
+                            statusText = clipboardBridge.writeClipboardSave(treeUri).message
+                        },
                         onBootstrapBackend = ::runBackendBootstrap
                     )
                 }
