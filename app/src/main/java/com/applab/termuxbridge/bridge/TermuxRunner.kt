@@ -22,14 +22,22 @@ class TermuxRunner(private val context: Context) {
     }
 
     fun run(action: BridgeAction): RunResult {
+        return runActionId(
+            actionId = action.id,
+            label = action.label,
+            description = "Run approved AppLab bridge action ${action.id}"
+        )
+    }
+
+    fun runActionId(actionId: String, label: String, description: String = "Run backend action."): RunResult {
         return runTermuxCommand(
-            expectedAction = action.id,
+            expectedAction = actionId,
             path = BRIDGE_PATH,
-            arguments = arrayOf(action.id),
+            arguments = arrayOf(actionId),
             stdin = null,
-            label = "AppLab Bridge: ${action.label}",
-            description = "Run approved AppLab bridge action ${action.id}",
-            waitingMessage = "Requested Termux action: ${action.id}. Waiting for results/latest_result.json to update."
+            label = "AppLab Bridge: $label",
+            description = description,
+            waitingMessage = "Requested Termux action: $actionId. Waiting for results/latest_result.json to update."
         )
     }
 
