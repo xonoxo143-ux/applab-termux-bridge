@@ -18,11 +18,20 @@ class BackendBootstrapper(
             return BootstrapWriteResult(false, "Bundled bootstrap installer missing: ${error.message ?: error::class.java.simpleName}")
         }
         val ok = bridgeFolder.writeText(treeUri, "bootstrap", INSTALLER_NAME, scriptText)
-        return if (ok) {
-            BootstrapWriteResult(true, "Backend bootstrap installer written to Documents/AppLabBridge/bootstrap/$INSTALLER_NAME.")
-        } else {
-            BootstrapWriteResult(false, "Could not write backend bootstrap installer to the shared bridge folder.")
+        if (!ok) {
+            return BootstrapWriteResult(false, "Could not write backend bootstrap installer to the selected bridge folder.")
         }
+        val readBack = bridgeFolder.readText(treeUri, listOf("bootstrap", INSTALLER_NAME))
+        if (readBack.isNullOrBlank()) {
+            return BootstrapWriteResult(false, "Bootstrap installer write was reported successful, but Android could not read it back from bootstrap/$INSTALLER_NAME.")
+        }
+        if (!readBack.contains("AppLab Bridge backend bootstrap")) {
+            return BootstrapWriteResult(false, "Bootstrap installer was written, but read-back verification did not match the bundled installer.")
+        }
+        return BootstrapWriteResult(
+            true,
+            "Bootstrap installer verified at Documents/AppLabBridge/bootstrap/$INSTALLER_NAME. Termux will run: $TERMUX_INSTALLER_PATH"
+        )
     }
 
     companion object {
