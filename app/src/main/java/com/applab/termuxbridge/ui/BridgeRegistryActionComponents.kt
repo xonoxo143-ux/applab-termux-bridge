@@ -12,6 +12,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,6 +26,50 @@ import com.applab.termuxbridge.actions.BackendActionDescriptor
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
+
+enum class ActionAvailabilityFilter(val label: String) {
+    ACTIVE("Active"),
+    READY("Ready"),
+    WARNINGS("Warnings"),
+    BLOCKED("Blocked"),
+    ALL("All")
+}
+
+fun actionVisibleForFilter(relevance: ActionRelevance, filter: ActionAvailabilityFilter): Boolean {
+    return when (filter) {
+        ActionAvailabilityFilter.ACTIVE -> relevance.availability == ActionAvailability.READY || relevance.availability == ActionAvailability.WARNING
+        ActionAvailabilityFilter.READY -> relevance.availability == ActionAvailability.READY
+        ActionAvailabilityFilter.WARNINGS -> relevance.availability == ActionAvailability.WARNING
+        ActionAvailabilityFilter.BLOCKED -> relevance.availability == ActionAvailability.BLOCKED
+        ActionAvailabilityFilter.ALL -> relevance.availability != ActionAvailability.HIDDEN
+    }
+}
+
+@Composable
+fun BridgeAvailabilityFilterPicker(
+    selected: ActionAvailabilityFilter,
+    onSelected: (ActionAvailabilityFilter) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ActionAvailabilityFilter.entries.chunked(2).forEach { rowFilters ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowFilters.forEach { filter ->
+                    val isSelected = filter == selected
+                    Button(
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color(0xFF1B6BFF) else Color(0xFF344055)),
+                        onClick = { onSelected(filter) }
+                    ) {
+                        Text(filter.label)
+                    }
+                }
+                if (rowFilters.size == 1) {
+                    Column(modifier = Modifier.weight(1f)) { }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun BridgeRegistryGroupOrFallback(
@@ -35,6 +83,7 @@ fun BridgeRegistryGroupOrFallback(
     onRunAction: (BridgeAction) -> Unit,
     fallbackContent: @Composable () -> Unit
 ) {
+    var filter by remember(groupName) { mutableStateOf(ActionAvailabilityFilter.ACTIVE) }
     val actions = (registryState as? BackendActionRegistryState.Loaded)
         ?.registry
         ?.actions
@@ -59,10 +108,21 @@ fun BridgeRegistryGroupOrFallback(
         )
     }.filter { (_, relevance) -> relevance.availability != ActionAvailability.HIDDEN }
 
+    val visibleActions = relevantActions.filter { (_, relevance) -> actionVisibleForFilter(relevance, filter) }
+    val readyCount = relevantActions.count { (_, relevance) -> relevance.availability == ActionAvailability.READY }
+    val warningCount = relevantActions.count { (_, relevance) -> relevance.availability == ActionAvailability.WARNING }
+    val blockedCount = relevantActions.count { (_, relevance) -> relevance.availability == ActionAvailability.BLOCKED }
+
     BridgeSectionCard(title) {
-        BridgeHintText("Registry-driven actions from config/actions.json. Rows now show ready, warning, or blocked state.")
-        relevantActions.forEach { (descriptor, relevance) ->
-            BridgeRegistryActionRow(descriptor, relevance, onRunAction)
+        BridgeHintText("Registry-driven actions from config/actions.json. Default view shows ready and warning actions; blocked actions stay available for troubleshooting.")
+        Text("ready $readyCount · warning $warningCount · blocked $blockedCount", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
+        BridgeAvailabilityFilterPicker(filter) { filter = it }
+        if (visibleActions.isEmpty()) {
+            BridgeHintText("No actions match the current filter.")
+        } else {
+            visibleActions.forEach { (descriptor, relevance) ->
+                BridgeRegistryActionRow(descriptor, relevance, onRunAction)
+            }
         }
     }
 }
