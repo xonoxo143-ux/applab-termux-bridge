@@ -309,10 +309,22 @@ fun AppLabBridgeApp() {
                         onOpenLog = openLog,
                         onGoTo = { currentScreen = it }
                     )
-                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(registryState = registryState, onRunAction = ::requestAction)
-                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(registryState = registryState, latestResult = latestResult, onRunAction = ::requestAction)
+                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(
+                        registryState = registryState,
+                        latestResult = latestResult,
+                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
+                        onRunAction = ::requestAction
+                    )
+                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(
+                        registryState = registryState,
+                        latestResult = latestResult,
+                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
+                        onRunAction = ::requestAction
+                    )
                     BridgeAppScreen.APK -> BridgeApkScreen(
                         registryState = registryState,
+                        latestResult = latestResult,
+                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
                         latestApkName = apkInstaller.latestApkName(treeUri),
                         onRunAction = ::requestAction,
                         onInstall = {
