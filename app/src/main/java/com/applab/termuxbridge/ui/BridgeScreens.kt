@@ -5,6 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
 
@@ -104,7 +105,22 @@ fun BridgeLatestResultCard(
 }
 
 @Composable
-fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
+fun BridgeRepoWorkbenchScreen(
+    registryState: BackendActionRegistryState,
+    onRunAction: (BridgeAction) -> Unit
+) {
+    BridgeRegistryGroupOrFallback(
+        registryState = registryState,
+        groupName = "Repo Workbench",
+        title = "Repo Workbench",
+        onRunAction = onRunAction
+    ) {
+        BridgeRepoWorkbenchFallback(onRunAction)
+    }
+}
+
+@Composable
+private fun BridgeRepoWorkbenchFallback(onRunAction: (BridgeAction) -> Unit) {
     BridgeSectionCard("Repo Setup") {
         BridgeHintText("Use Clone only when a repo is missing or needs to be repaired. Select actions only switch the active repo pointer.")
         BridgeActionButton(BridgeAction.CLONE_BRIDGE, onRunAction, tone = BridgeActionTone.WARNING)
@@ -144,7 +160,11 @@ fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
 }
 
 @Composable
-fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeAction) -> Unit) {
+fun BridgePatchRunnerScreen(
+    registryState: BackendActionRegistryState,
+    latestResult: BridgeResult,
+    onRunAction: (BridgeAction) -> Unit
+) {
     BridgeSectionCard("Patch Readiness") {
         BridgeHintText("Use this card before running any patch. It confirms the selected repo, branch, git state, and patch file visibility.")
         BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
@@ -154,6 +174,18 @@ fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeActi
         BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
     }
+    BridgeRegistryGroupOrFallback(
+        registryState = registryState,
+        groupName = "Patch Runner",
+        title = "Patch Runner Actions",
+        onRunAction = onRunAction
+    ) {
+        BridgePatchRunnerFallback(latestResult, onRunAction)
+    }
+}
+
+@Composable
+private fun BridgePatchRunnerFallback(latestResult: BridgeResult, onRunAction: (BridgeAction) -> Unit) {
     BridgeSectionCard("Run Patch File") {
         BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the selected repo.")
         BridgeActionButton(BridgeAction.RUN_PATCH_SCRIPT, onRunAction, tone = BridgeActionTone.WARNING)
@@ -176,11 +208,30 @@ fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeActi
 
 @Composable
 fun BridgeApkScreen(
+    registryState: BackendActionRegistryState,
     latestApkName: String?,
     onRunAction: (BridgeAction) -> Unit,
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
+    BridgeRegistryGroupOrFallback(
+        registryState = registryState,
+        groupName = "Build / APK",
+        title = "Build / APK Actions",
+        onRunAction = onRunAction
+    ) {
+        BridgeApkFallback(onRunAction)
+    }
+    BridgeSectionCard("Install Downloaded APK") {
+        Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
+        BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
+        BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
+        BridgeHintText("The first stable-signed APK may require uninstalling the old debug-signed app once. Future stable-signed APKs should update normally.")
+    }
+}
+
+@Composable
+private fun BridgeApkFallback(onRunAction: (BridgeAction) -> Unit) {
     BridgeSectionCard("Check for App Update") {
         BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact.")
         BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
@@ -188,12 +239,6 @@ fun BridgeApkScreen(
     BridgeSectionCard("Download App Update") {
         BridgeHintText("Saves the newest GitHub APK artifact to Documents/AppLabBridge/apks.")
         BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
-    }
-    BridgeSectionCard("Install Downloaded APK") {
-        Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
-        BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
-        BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
-        BridgeHintText("The first stable-signed APK may require uninstalling the old debug-signed app once. Future stable-signed APKs should update normally.")
     }
 }
 
