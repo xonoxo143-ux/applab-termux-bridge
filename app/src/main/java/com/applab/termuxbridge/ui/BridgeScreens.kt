@@ -225,15 +225,20 @@ fun BridgeSetupScreen(
     onRefresh: () -> Unit,
     onRunAction: (BridgeAction) -> Unit,
     onOpenSettings: () -> Unit,
-    onClipboard: () -> Unit
+    onClipboard: () -> Unit,
+    onBootstrapBackend: () -> Unit
 ) {
     BridgeSectionCard("Shared Bridge Folder") {
         BridgePrimaryButton("Choose Documents/AppLabBridge Folder", onPickFolder)
         BridgeSecondaryButton("Reload Saved Result File", onRefresh)
         BridgeHintText("This only rereads Documents/AppLabBridge/results/latest_result.json. It does not run a Termux command.")
     }
-    BridgeSectionCard("Termux Backend") {
+    BridgeSectionCard("Backend Bootstrap / Repair") {
+        BridgeHintText("Use this when the app times out because bridge_v2.sh or helper files are missing or stale. The app writes a bundled installer to the shared folder, then asks Termux bash to install the live backend.")
         BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
+        BridgePrimaryButton("Bootstrap / Repair Termux Backend", onBootstrapBackend)
+    }
+    BridgeSectionCard("Termux Backend From GitHub") {
         BridgeActionButton(BridgeAction.UPDATE_DISPATCHER, onRunAction, tone = BridgeActionTone.WARNING)
         BridgeSecondaryButton("Open Android Permissions for This App", onOpenSettings)
         BridgeHintText("Termux needs storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
