@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.applab.termuxbridge.actions.BackendActionRegistryReader
+import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.apk.ApkInstaller
 import com.applab.termuxbridge.bootstrap.BackendBootstrapper
 import com.applab.termuxbridge.bridge.BridgeAction
@@ -47,6 +49,7 @@ fun AppLabBridgeApp() {
     val context = LocalContext.current
     val bridgeFolder = remember(context) { SafBridgeFolder(context) }
     val resultReader = remember(context) { BridgeResultReader(bridgeFolder) }
+    val registryReader = remember(context) { BackendActionRegistryReader(bridgeFolder) }
     val termuxRunner = remember(context) { TermuxRunner(context) }
     val bootstrapper = remember(context) { BackendBootstrapper(context, bridgeFolder) }
     val appLogger = remember(context) { AppBridgeLogger(bridgeFolder) }
@@ -56,6 +59,7 @@ fun AppLabBridgeApp() {
 
     var treeUri by remember { mutableStateOf(bridgeFolder.savedUri()) }
     var latestResult by remember { mutableStateOf(resultReader.readLatest(treeUri)) }
+    var registryState by remember { mutableStateOf<BackendActionRegistryState>(registryReader.read(treeUri)) }
     var statusText by remember { mutableStateOf("Ready") }
     var pollingToken by remember { mutableStateOf(0) }
     var previousRunId by remember { mutableStateOf(latestResult.runId) }
@@ -69,6 +73,17 @@ fun AppLabBridgeApp() {
             prefix,
             "started=${result.started} phase=${result.phase} path=${result.commandPath} args=${result.arguments.joinToString(",")} stdinBytes=${result.stdinBytes} termuxInstalled=${result.termuxInstalled} runPermission=${result.runCommandPermission} message=${result.message}"
         )
+    }
+
+    fun reloadRegistry() {
+        registryState = registryReader.read(treeUri)
+        statusText = when (val state = registryState) {
+            BackendActionRegistryState.MissingFolder -> "No shared folder selected for registry."
+            BackendActionRegistryState.MissingRegistry -> "No action registry found. Run List Backend Actions first."
+            is BackendActionRegistryState.ParseError -> "Action registry parse error: ${state.message}"
+            is BackendActionRegistryState.Loaded -> "Loaded ${state.registry.actions.size} backend action(s)."
+        }
+        appLogger.log(treeUri, "registry.reload", "state=${registryState::class.java.simpleName} status=$statusText")
     }
 
     fun startPolling(action: BridgeAction, phase: BridgeCommandPhase = BridgeCommandPhase.WAITING_FOR_RESULT) {
@@ -139,6 +154,7 @@ fun AppLabBridgeApp() {
             val prep = bridgeFolder.prepareLayout(uri)
             treeUri = uri
             latestResult = resultReader.readLatest(uri)
+            registryState = registryReader.read(uri)
             previousRunId = latestResult.runId
             pendingCommand = null
             statusText = prep.message
@@ -148,6 +164,7 @@ fun AppLabBridgeApp() {
 
     LaunchedEffect(treeUri) {
         latestResult = resultReader.readLatest(treeUri)
+        registryState = registryReader.read(treeUri)
         previousRunId = latestResult.runId
         pendingCommand = null
         appLogger.log(treeUri, "app.load", "runId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
@@ -167,6 +184,10 @@ fun AppLabBridgeApp() {
                     pendingCommand = expected.copy(phase = BridgeCommandPhase.RESULT_RECEIVED)
                     statusText = "Result received: ${result.title}"
                     appLogger.log(treeUri, "poll.result", "matched=true runId=${result.runId} action=${result.action} status=${result.status}")
+                    if (result.action == BridgeAction.LIST_ACTIONS.id) {
+                        registryState = registryReader.read(treeUri)
+                        appLogger.log(treeUri, "registry.reload.afterListActions", "state=${registryState::class.java.simpleName}")
+                    }
                 } else {
                     pendingCommand = expected.copy(phase = BridgeCommandPhase.RESULT_MISMATCH)
                     statusText = "Different result received. Expected ${expected.expectedActionId}, saw ${result.action.ifBlank { "unknown" }}."
@@ -252,6 +273,11 @@ fun AppLabBridgeApp() {
                         onOpenLog = openLog,
                         onOpenDebugZip = openDebugZip,
                         onRunAction = ::requestAction
+                    )
+                    BridgeAppScreen.ACTION_CATALOG -> BridgeActionCatalogScreen(
+                        registryState = registryState,
+                        onReloadRegistry = ::reloadRegistry,
+                        onRunBuiltInAction = ::requestAction
                     )
                     BridgeAppScreen.ADVANCED -> BridgeAdvancedScreen(onRunAction = ::requestAction)
                     BridgeAppScreen.SETUP -> BridgeSetupScreen(
