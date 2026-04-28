@@ -1,10 +1,8 @@
 package com.applab.termuxbridge.ui
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -311,9 +309,10 @@ fun AppLabBridgeApp() {
                         onOpenLog = openLog,
                         onGoTo = { currentScreen = it }
                     )
-                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(onRunAction = ::requestAction)
-                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(latestResult = latestResult, onRunAction = ::requestAction)
+                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(registryState = registryState, onRunAction = ::requestAction)
+                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(registryState = registryState, latestResult = latestResult, onRunAction = ::requestAction)
                     BridgeAppScreen.APK -> BridgeApkScreen(
+                        registryState = registryState,
                         latestApkName = apkInstaller.latestApkName(treeUri),
                         onRunAction = ::requestAction,
                         onInstall = {
