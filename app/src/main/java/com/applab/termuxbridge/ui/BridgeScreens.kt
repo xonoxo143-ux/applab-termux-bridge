@@ -109,7 +109,11 @@ fun BridgeRepoWorkbenchScreen(
     registryState: BackendActionRegistryState,
     latestResult: BridgeResult,
     hasTermuxPermission: Boolean,
-    onRunAction: (BridgeAction) -> Unit
+    curationState: ActionCurationState,
+    onRunAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit
 ) {
     BridgeRegistryGroupOrFallback(
         registryState = registryState,
@@ -117,8 +121,12 @@ fun BridgeRepoWorkbenchScreen(
         latestResult = latestResult,
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = null,
+        curationState = curationState,
         title = "Repo Workbench",
-        onRunAction = onRunAction
+        onRunAction = onRunAction,
+        onTogglePin = onTogglePin,
+        onHideAction = onHideAction,
+        onUnhideAction = onUnhideAction
     ) {
         BridgeRepoWorkbenchFallback(onRunAction)
     }
@@ -169,7 +177,11 @@ fun BridgePatchRunnerScreen(
     registryState: BackendActionRegistryState,
     latestResult: BridgeResult,
     hasTermuxPermission: Boolean,
-    onRunAction: (BridgeAction) -> Unit
+    curationState: ActionCurationState,
+    onRunAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit
 ) {
     BridgeSectionCard("Patch Readiness") {
         BridgeHintText("Use this card before running any patch. It confirms the selected repo, branch, git state, and patch file visibility.")
@@ -186,8 +198,12 @@ fun BridgePatchRunnerScreen(
         latestResult = latestResult,
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = null,
+        curationState = curationState,
         title = "Patch Runner Actions",
-        onRunAction = onRunAction
+        onRunAction = onRunAction,
+        onTogglePin = onTogglePin,
+        onHideAction = onHideAction,
+        onUnhideAction = onUnhideAction
     ) {
         BridgePatchRunnerFallback(latestResult, onRunAction)
     }
@@ -220,8 +236,12 @@ fun BridgeApkScreen(
     registryState: BackendActionRegistryState,
     latestResult: BridgeResult,
     hasTermuxPermission: Boolean,
+    curationState: ActionCurationState,
     latestApkName: String?,
     onRunAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit,
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
@@ -231,8 +251,12 @@ fun BridgeApkScreen(
         latestResult = latestResult,
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = latestApkName,
+        curationState = curationState,
         title = "App Update Actions",
-        onRunAction = onRunAction
+        onRunAction = onRunAction,
+        onTogglePin = onTogglePin,
+        onHideAction = onHideAction,
+        onUnhideAction = onUnhideAction
     ) {
         BridgeApkFallback(onRunAction)
     }
