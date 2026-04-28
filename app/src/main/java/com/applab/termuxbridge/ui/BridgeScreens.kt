@@ -5,6 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.applab.termuxbridge.actions.BackendActionDescriptor
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
@@ -13,17 +14,94 @@ import com.applab.termuxbridge.bridge.BridgeResult
 fun BridgeHomeScreen(
     treeUri: Uri?,
     latestResult: BridgeResult,
+    registryState: BackendActionRegistryState,
+    hasTermuxPermission: Boolean,
+    curationState: ActionCurationState,
+    latestApkName: String?,
     onPickFolder: () -> Unit,
     onRefresh: () -> Unit,
     onRunAction: (BridgeAction) -> Unit,
     onOpenReport: () -> Unit,
     onOpenLog: () -> Unit,
-    onGoTo: (BridgeAppScreen) -> Unit
+    onGoTo: (BridgeAppScreen) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit
 ) {
     BridgeReadinessCard(treeUri, latestResult, onPickFolder, onRunAction)
+    BridgePinnedActionsCard(
+        registryState = registryState,
+        latestResult = latestResult,
+        hasTermuxPermission = hasTermuxPermission,
+        curationState = curationState,
+        latestApkName = latestApkName,
+        onRunAction = onRunAction,
+        onGoTo = onGoTo,
+        onTogglePin = onTogglePin,
+        onHideAction = onHideAction,
+        onUnhideAction = onUnhideAction
+    )
     BridgeActiveRepoCard(latestResult, onRunAction, onGoTo)
     BridgeNextActionCard(treeUri, latestResult, onPickFolder, onRunAction, onOpenReport, onGoTo)
     BridgeLatestResultCard(latestResult, onRefresh, onOpenReport, onOpenLog, onGoTo)
+}
+
+@Composable
+fun BridgePinnedActionsCard(
+    registryState: BackendActionRegistryState,
+    latestResult: BridgeResult,
+    hasTermuxPermission: Boolean,
+    curationState: ActionCurationState,
+    latestApkName: String?,
+    onRunAction: (BridgeAction) -> Unit,
+    onGoTo: (BridgeAppScreen) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit
+) {
+    val registry = (registryState as? BackendActionRegistryState.Loaded)?.registry
+    val pinnedActions = curationState.pinnedIds.mapNotNull { id ->
+        registry?.actions?.firstOrNull { it.id == id && !curationState.isHidden(it.id) }
+    }
+    BridgeSectionCard("Pinned Actions") {
+        when {
+            registry == null -> {
+                BridgeHintText("No backend action registry loaded yet. Run List Backend Actions from Action Catalog.")
+                BridgeSecondaryButton("Open Action Catalog") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+            }
+            curationState.pinnedIds.isEmpty() -> {
+                BridgeHintText("No actions pinned yet. Open Action Catalog, enable Customize Actions, then pin the actions you use most.")
+                BridgeSecondaryButton("Open Action Catalog") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+            }
+            pinnedActions.isEmpty() -> {
+                BridgeHintText("Pinned actions are currently hidden or missing from the latest registry.")
+                BridgeSecondaryButton("Manage Pinned / Hidden") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+            }
+            else -> {
+                pinnedActions.forEach { action ->
+                    val relevance = relevanceForAction(
+                        descriptor = action,
+                        result = latestResult,
+                        hasTermuxPermission = hasTermuxPermission,
+                        latestApkName = latestApkName
+                    )
+                    if (relevance.availability != ActionAvailability.HIDDEN) {
+                        BridgeRegistryActionRow(
+                            descriptor = action,
+                            relevance = relevance,
+                            curationState = curationState,
+                            showHiddenAction = false,
+                            onRunAction = onRunAction,
+                            onTogglePin = onTogglePin,
+                            onHideAction = onHideAction,
+                            onUnhideAction = onUnhideAction
+                        )
+                    }
+                }
+                BridgeSecondaryButton("Manage Pinned Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+            }
+        }
+    }
 }
 
 @Composable
