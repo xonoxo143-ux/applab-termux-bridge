@@ -105,18 +105,18 @@ fun BridgeLatestResultCard(
 
 @Composable
 fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Choose Repo") {
-        BridgeActionGroup(
-            actions = listOf(
-                BridgeAction.LIST_PROJECTS,
-                BridgeAction.SHOW_ACTIVE_REPO,
-                BridgeAction.SET_ACTIVE_BRIDGE,
-                BridgeAction.SET_ACTIVE_LIBRESEED
-            ),
-            onRunAction = onRunAction
-        )
+    BridgeSectionCard("Repo Setup") {
+        BridgeHintText("Use Clone only when a repo is missing or needs to be repaired. Select actions only switch the active repo pointer.")
+        BridgeActionButton(BridgeAction.CLONE_BRIDGE, onRunAction, tone = BridgeActionTone.WARNING)
+        BridgeActionButton(BridgeAction.CLONE_LIBRESEED, onRunAction, tone = BridgeActionTone.WARNING)
+        BridgeActionButton(BridgeAction.LIST_PROJECTS, onRunAction)
     }
-    BridgeSectionCard("Read Repo State") {
+    BridgeSectionCard("Choose Active Repo") {
+        BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
+        BridgeActionButton(BridgeAction.SET_ACTIVE_BRIDGE, onRunAction)
+        BridgeActionButton(BridgeAction.SET_ACTIVE_LIBRESEED, onRunAction)
+    }
+    BridgeSectionCard("Inspect Repo") {
         BridgeActionGroup(
             actions = listOf(
                 BridgeAction.SHOW_STATUS,
@@ -145,14 +145,23 @@ fun BridgeRepoWorkbenchScreen(onRunAction: (BridgeAction) -> Unit) {
 
 @Composable
 fun BridgePatchRunnerScreen(latestResult: BridgeResult, onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Run Patch File") {
-        BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the selected repo. Check repo and branch first.")
+    BridgeSectionCard("Patch Readiness") {
+        BridgeHintText("Use this card before running any patch. It confirms the selected repo, branch, git state, and patch file visibility.")
+        BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
+        BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
+        BridgeStatusLine("Git state", latestResult.stateLabel, latestResult.dirty == false)
         BridgeStatusLine("Patch file", latestResult.patchLabel, latestResult.hasPatchFile == true)
         BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
+    }
+    BridgeSectionCard("Run Patch File") {
+        BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the selected repo.")
         BridgeActionButton(BridgeAction.RUN_PATCH_SCRIPT, onRunAction, tone = BridgeActionTone.WARNING)
+    }
+    BridgeSectionCard("Review Patch Output") {
         BridgeActionButton(BridgeAction.LIST_CHANGED_FILES, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_DIFF_SUMMARY, onRunAction)
+        BridgeActionButton(BridgeAction.SHOW_FULL_DIFF, onRunAction)
     }
     BridgeSectionCard("Commit and Push") {
         BridgeHintText("Use only after reviewing the diff. The commit action appends [no apk] when needed.")
@@ -172,16 +181,19 @@ fun BridgeApkScreen(
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    BridgeSectionCard("Download App Update") {
-        BridgeHintText("Uses Termux and GitHub CLI to find the latest successful Debug APK workflow artifact, then saves the APK to the shared bridge folder.")
+    BridgeSectionCard("Check for App Update") {
+        BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact.")
         BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
+    }
+    BridgeSectionCard("Download App Update") {
+        BridgeHintText("Saves the newest GitHub APK artifact to Documents/AppLabBridge/apks.")
         BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
     }
     BridgeSectionCard("Install Downloaded APK") {
         Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
         BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
         BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
-        BridgeHintText("Android may ask for permission to install unknown apps from AppLab Bridge.")
+        BridgeHintText("The first stable-signed APK may require uninstalling the old debug-signed app once. Future stable-signed APKs should update normally.")
     }
 }
 
@@ -191,14 +203,19 @@ fun BridgeResultsScreen(
     onRefresh: () -> Unit,
     onOpenReport: () -> Unit,
     onOpenLog: () -> Unit,
-    onOpenDebugZip: () -> Unit
+    onOpenDebugZip: () -> Unit,
+    onRunAction: (BridgeAction) -> Unit
 ) {
     BridgeSectionCard("Saved Result File") {
         BridgeResultBlock(result)
         BridgePrimaryButton("Open Last Action Report", onOpenReport)
         BridgeSecondaryButton("Open Latest Log File", onOpenLog)
-        BridgeSecondaryButton("Open Latest Debug Zip", onOpenDebugZip)
         BridgeSecondaryButton("Reload Saved Result File", onRefresh)
+    }
+    BridgeSectionCard("Debug Bundle") {
+        BridgeHintText("Create a zip of reports, logs, config, and result files. APK files are excluded.")
+        BridgeActionButton(BridgeAction.CREATE_DEBUG_ZIP, onRunAction)
+        BridgeSecondaryButton("Open Latest Debug Zip", onOpenDebugZip)
     }
 }
 
@@ -221,8 +238,8 @@ fun BridgeSetupScreen(
         BridgeSecondaryButton("Open Android Permissions for This App", onOpenSettings)
         BridgeHintText("Termux needs storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
     }
-    BridgeSectionCard("Parked Tools") {
+    BridgeSectionCard("Inbox") {
         BridgeSecondaryButton("Save Clipboard Text to Inbox", onClipboard)
-        BridgeHintText("These tools are parked until their backend workflows are clean and testable.")
+        BridgeHintText("This writes clipboard text into the shared bridge folder for later backend workflows. It does not run Termux.")
     }
 }
