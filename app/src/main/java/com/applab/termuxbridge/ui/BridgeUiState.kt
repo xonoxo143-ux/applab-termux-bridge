@@ -11,6 +11,7 @@ enum class BridgeAppScreen(val title: String) {
     PATCH("Patch Runner"),
     APK("Build / APK"),
     RESULTS("Results"),
+    ACTION_CATALOG("Action Catalog"),
     ADVANCED("Advanced Tools"),
     SETUP("Setup")
 }
@@ -36,7 +37,7 @@ fun bridgeRecommendedAction(treeUri: Uri?, result: BridgeResult): BridgeRecommen
     if (treeUri == null) {
         return BridgeRecommendedAction(
             title = "Choose the shared bridge folder",
-            detail = "The app needs Documents/AppLabBridge before it can read Termux reports, logs, APKs, or patch files.",
+            detail = "The app needs a shared bridge folder before it can read Termux reports, logs, APKs, or patch files.",
             buttonLabel = "Choose Shared Bridge Folder",
             pickFolder = true
         )
@@ -60,6 +61,9 @@ fun bridgeRecommendedAction(treeUri: Uri?, result: BridgeResult): BridgeRecommen
     }
     if (result.action == "download_latest_apk") {
         return BridgeRecommendedAction("Install the downloaded APK", "The latest APK should now be in the shared bridge folder.", "Open Build / APK", screen = BridgeAppScreen.APK)
+    }
+    if (result.action == "list_actions") {
+        return BridgeRecommendedAction("Open Action Catalog", "The backend action registry was written. Reload the catalog to view it.", "Open Action Catalog", screen = BridgeAppScreen.ACTION_CATALOG)
     }
     if (result.action == "update_dispatcher") {
         return BridgeRecommendedAction("Verify the dispatcher", "The backend dispatcher was updated. Run the setup check before other actions.", BridgeAction.CHECK_SETUP.label, BridgeAction.CHECK_SETUP)
@@ -121,6 +125,7 @@ fun bridgeActionRiskText(action: BridgeAction): String {
         BridgeAction.COMMIT_NO_APK -> "Creates a local commit. The backend appends [no apk] when needed."
         BridgeAction.PUSH_CURRENT -> "Pushes the current branch to GitHub. Confirm the branch and commit first."
         BridgeAction.DOWNLOAD_LATEST_APK -> "Downloads the latest GitHub APK artifact into the shared bridge folder. Install remains a separate Android confirmation."
+        BridgeAction.LIST_ACTIONS -> "Writes the backend action registry to config/actions.json and a readable report to reports/list_actions.txt."
         else -> "This action changes repo or backend state. Confirm before running."
     }
 }
