@@ -66,6 +66,7 @@ fun AppLabBridgeApp() {
     var currentScreen by remember { mutableStateOf(BridgeAppScreen.HOME) }
     var pendingAction by remember { mutableStateOf<BridgeAction?>(null) }
     var pendingCommand by remember { mutableStateOf<BridgePendingCommand?>(null) }
+    var folderPrompted by remember { mutableStateOf(false) }
     var permissionPrompted by remember { mutableStateOf(false) }
     var autoScannedAfterSetup by remember { mutableStateOf(false) }
 
@@ -200,14 +201,20 @@ fun AppLabBridgeApp() {
             pendingCommand = null
             statusText = prep.message
             appLogger.log(uri, "folder.selected", "prepSuccess=${prep.success} message=${prep.message} runId=${latestResult.runId} action=${latestResult.action}")
+        } else {
+            statusText = "Shared folder selection cancelled. The app cannot read bridge reports until a folder is selected."
+            appLogger.log(treeUri, "folder.cancelled", "noUriReturned=true")
         }
     }
 
     LaunchedEffect(Unit) {
-        if (!permissionPrompted && !termuxRunner.hasRunCommandPermission()) {
-            permissionPrompted = true
+        if (!folderPrompted && treeUri == null) {
+            folderPrompted = true
+            currentScreen = BridgeAppScreen.SETUP
+            statusText = "Choose Documents or the AppLabBridge folder so the app can read backend reports and APKs."
+            appLogger.log(treeUri, "folder.prompt", "initial=true")
             delay(500)
-            requestTermuxPermission("initial app launch")
+            folderPicker.launch(null)
         }
     }
 
@@ -217,6 +224,11 @@ fun AppLabBridgeApp() {
         previousRunId = latestResult.runId
         pendingCommand = null
         appLogger.log(treeUri, "app.load", "runId=${latestResult.runId} action=${latestResult.action} status=${latestResult.status} title=${latestResult.title}")
+        if (treeUri != null && !permissionPrompted && !termuxRunner.hasRunCommandPermission()) {
+            permissionPrompted = true
+            delay(500)
+            requestTermuxPermission("after shared folder selection")
+        }
     }
 
     LaunchedEffect(pollingToken) {
