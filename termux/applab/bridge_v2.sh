@@ -49,6 +49,7 @@ source_helper result_writer.sh || { write_result() { echo "Result writer missing
 source_helper apk_actions.sh || true
 source_helper utility_actions.sh || true
 source_helper parked_actions.sh || true
+source_helper action_registry.sh || true
 
 active_repo() {
   if [ -f "$CONFIG_DIR/active_repo.txt" ]; then
@@ -117,6 +118,26 @@ case "$ACTION" in
       write_result "success" "Setup checked" "Setup report written." "$CODE" "$REPORT_FILE" "Backend setup completed. If app still times out, inspect android_app_bridge.log and Termux pending-intent result logs."
     else
       write_result "failed" "Setup check failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE" "Setup report failed before completion. Inspect the report for the last completed section."
+    fi
+    exit "$CODE"
+    ;;
+
+  list_actions)
+    REPORT_FILE="$REPORTS_DIR/list_actions.txt"
+    if ! command -v write_action_registry >/dev/null 2>&1 || ! command -v print_action_registry_report >/dev/null 2>&1; then
+      write_result "failed" "Action registry unavailable" "action_registry.sh was not loaded." 1 "" "Bootstrap or update the dispatcher so action_registry.sh is installed in ~/.termux/applab/lib."
+      exit 1
+    fi
+    {
+      write_action_registry
+      print_action_registry_report
+    } > "$REPORT_FILE" 2>&1
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE" 2>/dev/null || true
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "Actions listed" "Action registry written to config/actions.json." "$CODE" "$REPORT_FILE" "Phase 1 registry is available. Android can read config/actions.json in a later phase."
+    else
+      write_result "failed" "Action registry failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE" "Open list_actions report and check JSON generation."
     fi
     exit "$CODE"
     ;;
