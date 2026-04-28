@@ -1,8 +1,16 @@
 package com.applab.termuxbridge.ui
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
@@ -26,172 +34,80 @@ fun BridgeHomeScreen(
     onHideAction: (String) -> Unit,
     onUnhideAction: (String) -> Unit
 ) {
-    BridgeDashboardReadinessStrip(
-        treeUri = treeUri,
-        hasTermuxPermission = hasTermuxPermission,
-        registryState = registryState,
-        latestResult = latestResult,
-        onPickFolder = onPickFolder,
-        onRunAction = onRunAction,
-        onGoTo = onGoTo
-    )
+    BridgeDashboardReadinessStrip(treeUri, hasTermuxPermission, registryState, latestResult, onPickFolder, onRunAction, onGoTo)
     BridgeDashboardRepoSummary(latestResult, onRunAction, onGoTo)
     BridgeDashboardNextStep(treeUri, latestResult, onPickFolder, onRunAction, onOpenReport, onGoTo)
-    BridgeDashboardPinnedActions(
-        registryState = registryState,
-        latestResult = latestResult,
-        hasTermuxPermission = hasTermuxPermission,
-        curationState = curationState,
-        latestApkName = latestApkName,
-        onRunAction = onRunAction,
-        onGoTo = onGoTo
-    )
+    BridgeDashboardPinnedActions(registryState, latestResult, hasTermuxPermission, curationState, latestApkName, onRunAction, onGoTo)
     BridgeDashboardLastResult(latestResult, onOpenReport, onOpenLog, onGoTo)
 }
 
 @Composable
-fun BridgeReadinessCard(
-    treeUri: Uri?,
-    latestResult: BridgeResult,
-    onPickFolder: () -> Unit,
-    onRunAction: (BridgeAction) -> Unit
-) {
-    BridgeSectionCard("Setup Status") {
-        BridgeStatusLine("Shared folder access", if (treeUri == null) "not selected" else "selected", treeUri != null)
-        BridgeStatusLine("Saved result file", if (latestResult.isLoaded) "loaded" else "not found", latestResult.isLoaded)
-        BridgeStatusLine("Last Termux action", latestResult.action.ifBlank { "none" }, latestResult.status.equals("success", true))
-        if (treeUri == null) {
-            BridgePrimaryButton("Choose Shared Bridge Folder", onPickFolder)
-        } else {
-            BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
-        }
-    }
-}
-
-@Composable
-fun BridgeActiveRepoCard(
-    latestResult: BridgeResult,
-    onRunAction: (BridgeAction) -> Unit,
-    onGoTo: (BridgeAppScreen) -> Unit
-) {
-    BridgeSectionCard("Selected Repo") {
-        BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
-        BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
-        BridgeStatusLine("Git state", latestResult.stateLabel, latestResult.dirty == false)
-        BridgeStatusLine("Changes", latestResult.changeBreakdownLabel, latestResult.dirty == false)
-        BridgeStatusLine("Patch file", latestResult.patchLabel, latestResult.hasPatchFile == true)
-        latestResult.currentCommit?.let { commit -> BridgeStatusLine("Commit", commit, true) }
-        latestResult.upstream?.takeIf { it.isNotBlank() }?.let { upstream -> BridgeStatusLine("Upstream", upstream, true) }
-        BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
-        BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
-        BridgeSecondaryButton("Go to Repo") { onGoTo(BridgeAppScreen.REPO) }
-    }
-}
-
-@Composable
-fun BridgeNextActionCard(
-    treeUri: Uri?,
-    latestResult: BridgeResult,
-    onPickFolder: () -> Unit,
-    onRunAction: (BridgeAction) -> Unit,
-    onOpenReport: () -> Unit,
-    onGoTo: (BridgeAppScreen) -> Unit
-) {
-    val action = bridgeRecommendedAction(treeUri, latestResult)
-    BridgeSectionCard("Suggested Next Step") {
-        Text(action.title, color = Color.White)
-        BridgeHintText(action.detail)
-        when {
-            action.pickFolder -> BridgePrimaryButton(action.buttonLabel, onPickFolder)
-            action.openReport -> BridgePrimaryButton(action.buttonLabel, onOpenReport)
-            action.screen != null -> BridgePrimaryButton(action.buttonLabel) { onGoTo(action.screen) }
-            action.bridgeAction != null -> BridgeActionButton(action.bridgeAction, onRunAction, tone = action.tone)
-        }
-    }
-}
-
-@Composable
-fun BridgeLatestResultCard(
-    result: BridgeResult,
-    onRefresh: () -> Unit,
-    onOpenReport: () -> Unit,
-    onOpenLog: () -> Unit,
-    onGoTo: (BridgeAppScreen) -> Unit
-) {
-    BridgeSectionCard("Last Saved Termux Result") {
-        BridgeResultBlock(result)
-        BridgePrimaryButton("Open Last Action Report", onOpenReport)
-        BridgeSecondaryButton("Open Latest Log File", onOpenLog)
-        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
-        BridgeSecondaryButton("Go to Results") { onGoTo(BridgeAppScreen.RESULTS) }
-    }
-}
-
-@Composable
 fun BridgeRepoWorkbenchScreen(
-    registryState: BackendActionRegistryState,
     latestResult: BridgeResult,
-    hasTermuxPermission: Boolean,
-    curationState: ActionCurationState,
+    repoChoices: List<BridgeRepoChoice>,
     onRunAction: (BridgeAction) -> Unit,
-    onTogglePin: (String) -> Unit,
-    onHideAction: (String) -> Unit,
-    onUnhideAction: (String) -> Unit
+    onChooseRepo: (BridgeRepoChoice) -> Unit,
+    onGoTo: (BridgeAppScreen) -> Unit
 ) {
-    BridgeRegistryGroupOrFallback(
-        registryState = registryState,
-        groupName = "Repo Workbench",
-        latestResult = latestResult,
-        hasTermuxPermission = hasTermuxPermission,
-        latestApkName = null,
-        curationState = curationState,
-        title = "Repo Actions",
-        onRunAction = onRunAction,
-        onTogglePin = onTogglePin,
-        onHideAction = onHideAction,
-        onUnhideAction = onUnhideAction
-    ) {
-        BridgeRepoWorkbenchFallback(onRunAction)
+    BridgeSectionCard("Current Repo") {
+        BridgeStatusLine("Repo", latestResult.repoName ?: "none selected", latestResult.repoName != null)
+        BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
+        BridgeStatusLine("State", latestResult.stateLabel, latestResult.dirty == false)
+        BridgeStatusLine("Changes", latestResult.changeBreakdownLabel, latestResult.dirty == false)
+        BridgeStatusLine("Patch", latestResult.patchLabel, latestResult.hasPatchFile == true)
     }
-}
 
-@Composable
-private fun BridgeRepoWorkbenchFallback(onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Repo Setup") {
-        BridgeHintText("Use Clone only when a repo is missing or needs to be repaired. Select actions only switch the active repo pointer.")
-        BridgeActionButton(BridgeAction.CLONE_BRIDGE, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeActionButton(BridgeAction.CLONE_LIBRESEED, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeActionButton(BridgeAction.LIST_PROJECTS, onRunAction)
+    BridgeSectionCard("Choose Repo") {
+        BridgeHintText("Find repos scans Termux ~/projects. Tap a repo below to make it the active repo.")
+        BridgePrimaryButton("Find Repos", { onRunAction(BridgeAction.LIST_PROJECTS) })
+        if (repoChoices.isEmpty()) {
+            BridgeHintText("No scanned repos loaded yet. Tap Find Repos first.")
+        } else {
+            repoChoices.take(5).forEach { choice ->
+                Button(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                    onClick = { onChooseRepo(choice) }
+                ) { Text(choice.name) }
+            }
+            if (repoChoices.size > 5) {
+                BridgeHintText("Showing first 5 repos. Refine repo folders later if this gets crowded.")
+            }
+        }
     }
-    BridgeSectionCard("Choose Active Repo") {
-        BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
-        BridgeActionButton(BridgeAction.SET_ACTIVE_BRIDGE, onRunAction)
-        BridgeActionButton(BridgeAction.SET_ACTIVE_LIBRESEED, onRunAction)
-    }
-    BridgeSectionCard("Inspect Repo") {
-        BridgeActionGroup(
-            actions = listOf(
-                BridgeAction.SHOW_STATUS,
-                BridgeAction.SHOW_CURRENT_COMMIT,
-                BridgeAction.SHOW_BRANCHES,
-                BridgeAction.LIST_CHANGED_FILES,
-                BridgeAction.SHOW_DIFF_SUMMARY,
-                BridgeAction.SHOW_FULL_DIFF
-            ),
-            onRunAction = onRunAction
-        )
-    }
-    BridgeSectionCard("Update Repo From GitHub") {
-        BridgeHintText("Pull and checkout actions should be used on a clean repo.")
-        BridgeActionGroup(
-            actions = listOf(
-                BridgeAction.FETCH_REPO,
-                BridgeAction.PULL_CURRENT,
-                BridgeAction.CHECKOUT_STAGING,
-                BridgeAction.PULL_STAGING
-            ),
-            onRunAction = onRunAction
-        )
+
+    BridgeSectionCard("Repo Actions") {
+        val hasRepo = latestResult.repoName != null || latestResult.branch != null
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                enabled = hasRepo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = { onRunAction(BridgeAction.CHECK_REPO) }
+            ) { Text("Check") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                enabled = hasRepo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB86814)),
+                onClick = { onRunAction(BridgeAction.PULL_CURRENT) }
+            ) { Text("Update") }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                enabled = hasRepo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = { onRunAction(BridgeAction.LIST_CHANGED_FILES) }
+            ) { Text("Changes") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+            ) { Text("Actions") }
+        }
+        if (!hasRepo) {
+            BridgeHintText("Choose a repo before checking, updating, or viewing changes.")
+        }
     }
 }
 
@@ -212,45 +128,10 @@ fun BridgePatchRunnerScreen(
         BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
         BridgeStatusLine("Git state", latestResult.stateLabel, latestResult.dirty == false)
         BridgeStatusLine("Patch file", latestResult.patchLabel, latestResult.hasPatchFile == true)
-        BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
-        BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
+        BridgeActionButton(BridgeAction.CHECK_REPO, onRunAction)
     }
-    BridgeRegistryGroupOrFallback(
-        registryState = registryState,
-        groupName = "Patch Runner",
-        latestResult = latestResult,
-        hasTermuxPermission = hasTermuxPermission,
-        latestApkName = null,
-        curationState = curationState,
-        title = "Patch Actions",
-        onRunAction = onRunAction,
-        onTogglePin = onTogglePin,
-        onHideAction = onHideAction,
-        onUnhideAction = onUnhideAction
-    ) {
-        BridgePatchRunnerFallback(latestResult, onRunAction)
-    }
-}
-
-@Composable
-private fun BridgePatchRunnerFallback(latestResult: BridgeResult, onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Run Patch File") {
-        BridgeHintText("Runs Documents/AppLabBridge/patches/patch.sh against the selected repo.")
-        BridgeActionButton(BridgeAction.RUN_PATCH_SCRIPT, onRunAction, tone = BridgeActionTone.WARNING)
-    }
-    BridgeSectionCard("Review Patch Output") {
-        BridgeActionButton(BridgeAction.LIST_CHANGED_FILES, onRunAction)
-        BridgeActionButton(BridgeAction.SHOW_DIFF_SUMMARY, onRunAction)
-        BridgeActionButton(BridgeAction.SHOW_FULL_DIFF, onRunAction)
-    }
-    BridgeSectionCard("Commit and Push") {
-        BridgeHintText("Use only after reviewing the diff. The commit action appends [no apk] when needed.")
-        BridgeStatusLine("Staged", "${latestResult.stagedFiles ?: 0}", (latestResult.stagedFiles ?: 0) > 0)
-        BridgeStatusLine("Unstaged", "${latestResult.unstagedFiles ?: 0}", (latestResult.unstagedFiles ?: 0) == 0)
-        BridgeStatusLine("Untracked", "${latestResult.untrackedFiles ?: 0}", (latestResult.untrackedFiles ?: 0) == 0)
-        BridgeActionButton(BridgeAction.STAGE_ALL, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeActionButton(BridgeAction.COMMIT_NO_APK, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeActionButton(BridgeAction.PUSH_CURRENT, onRunAction, tone = BridgeActionTone.WARNING)
+    BridgeRegistryGroupOrFallback(registryState, "Patch Runner", latestResult, hasTermuxPermission, null, curationState, title = "Patch Actions", onRunAction = onRunAction, onTogglePin = onTogglePin, onHideAction = onHideAction, onUnhideAction = onUnhideAction) {
+        BridgeSectionCard("Patch Unavailable") { BridgeHintText("Backend action registry is unavailable. Open Setup and refresh backend actions.") }
     }
 }
 
@@ -268,38 +149,17 @@ fun BridgeApkScreen(
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    BridgeRegistryGroupOrFallback(
-        registryState = registryState,
-        groupName = "Build / APK",
-        latestResult = latestResult,
-        hasTermuxPermission = hasTermuxPermission,
-        latestApkName = latestApkName,
-        curationState = curationState,
-        title = "Update Actions",
-        onRunAction = onRunAction,
-        onTogglePin = onTogglePin,
-        onHideAction = onHideAction,
-        onUnhideAction = onUnhideAction
-    ) {
-        BridgeApkFallback(onRunAction)
+    BridgeRegistryGroupOrFallback(registryState, "Build / APK", latestResult, hasTermuxPermission, latestApkName, curationState, title = "Update Actions", onRunAction = onRunAction, onTogglePin = onTogglePin, onHideAction = onHideAction, onUnhideAction = onUnhideAction) {
+        BridgeSectionCard("Update Actions") {
+            BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
+            BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
+        }
     }
     BridgeSectionCard("Install Downloaded Update") {
         Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
         BridgePrimaryButton("Open Android Installer", onInstall)
         BridgeSecondaryButton("Open Install Permission", onInstallSettings)
         BridgeHintText("If Android says conflicting package, uninstall AppLab Bridge once, then install APKs from the kept Debug APK workflow.")
-    }
-}
-
-@Composable
-private fun BridgeApkFallback(onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Check for Update") {
-        BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact. This does not build an APK on the phone.")
-        BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
-    }
-    BridgeSectionCard("Download Update") {
-        BridgeHintText("Downloads the newest GitHub APK artifact to Documents/AppLabBridge/apks.")
-        BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
     }
 }
 
