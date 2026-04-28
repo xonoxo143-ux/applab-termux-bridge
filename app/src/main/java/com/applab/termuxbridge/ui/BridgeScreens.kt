@@ -4,8 +4,6 @@ import android.net.Uri
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import com.applab.termuxbridge.actions.BackendActionDescriptor
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
@@ -28,80 +26,27 @@ fun BridgeHomeScreen(
     onHideAction: (String) -> Unit,
     onUnhideAction: (String) -> Unit
 ) {
-    BridgeReadinessCard(treeUri, latestResult, onPickFolder, onRunAction)
-    BridgePinnedActionsCard(
+    BridgeDashboardReadinessStrip(
+        treeUri = treeUri,
+        hasTermuxPermission = hasTermuxPermission,
+        registryState = registryState,
+        latestResult = latestResult,
+        onPickFolder = onPickFolder,
+        onRunAction = onRunAction,
+        onGoTo = onGoTo
+    )
+    BridgeDashboardRepoSummary(latestResult, onRunAction, onGoTo)
+    BridgeDashboardNextStep(treeUri, latestResult, onPickFolder, onRunAction, onOpenReport, onGoTo)
+    BridgeDashboardPinnedActions(
         registryState = registryState,
         latestResult = latestResult,
         hasTermuxPermission = hasTermuxPermission,
         curationState = curationState,
         latestApkName = latestApkName,
         onRunAction = onRunAction,
-        onGoTo = onGoTo,
-        onTogglePin = onTogglePin,
-        onHideAction = onHideAction,
-        onUnhideAction = onUnhideAction
+        onGoTo = onGoTo
     )
-    BridgeActiveRepoCard(latestResult, onRunAction, onGoTo)
-    BridgeNextActionCard(treeUri, latestResult, onPickFolder, onRunAction, onOpenReport, onGoTo)
-    BridgeLatestResultCard(latestResult, onRefresh, onOpenReport, onOpenLog, onGoTo)
-}
-
-@Composable
-fun BridgePinnedActionsCard(
-    registryState: BackendActionRegistryState,
-    latestResult: BridgeResult,
-    hasTermuxPermission: Boolean,
-    curationState: ActionCurationState,
-    latestApkName: String?,
-    onRunAction: (BridgeAction) -> Unit,
-    onGoTo: (BridgeAppScreen) -> Unit,
-    onTogglePin: (String) -> Unit,
-    onHideAction: (String) -> Unit,
-    onUnhideAction: (String) -> Unit
-) {
-    val registry = (registryState as? BackendActionRegistryState.Loaded)?.registry
-    val pinnedActions = curationState.pinnedIds.mapNotNull { id ->
-        registry?.actions?.firstOrNull { it.id == id && !curationState.isHidden(it.id) }
-    }
-    BridgeSectionCard("Pinned Actions") {
-        when {
-            registry == null -> {
-                BridgeHintText("No backend action registry loaded yet. Run List Backend Actions from Action Catalog.")
-                BridgeSecondaryButton("Open Action Catalog") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
-            }
-            curationState.pinnedIds.isEmpty() -> {
-                BridgeHintText("No actions pinned yet. Open Action Catalog, enable Customize Actions, then pin the actions you use most.")
-                BridgeSecondaryButton("Open Action Catalog") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
-            }
-            pinnedActions.isEmpty() -> {
-                BridgeHintText("Pinned actions are currently hidden or missing from the latest registry.")
-                BridgeSecondaryButton("Manage Pinned / Hidden") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
-            }
-            else -> {
-                pinnedActions.forEach { action ->
-                    val relevance = relevanceForAction(
-                        descriptor = action,
-                        result = latestResult,
-                        hasTermuxPermission = hasTermuxPermission,
-                        latestApkName = latestApkName
-                    )
-                    if (relevance.availability != ActionAvailability.HIDDEN) {
-                        BridgeRegistryActionRow(
-                            descriptor = action,
-                            relevance = relevance,
-                            curationState = curationState,
-                            showHiddenAction = false,
-                            onRunAction = onRunAction,
-                            onTogglePin = onTogglePin,
-                            onHideAction = onHideAction,
-                            onUnhideAction = onUnhideAction
-                        )
-                    }
-                }
-                BridgeSecondaryButton("Manage Pinned Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
-            }
-        }
-    }
+    BridgeDashboardLastResult(latestResult, onOpenReport, onOpenLog, onGoTo)
 }
 
 @Composable
@@ -139,7 +84,7 @@ fun BridgeActiveRepoCard(
         latestResult.upstream?.takeIf { it.isNotBlank() }?.let { upstream -> BridgeStatusLine("Upstream", upstream, true) }
         BridgeActionButton(BridgeAction.SHOW_ACTIVE_REPO, onRunAction)
         BridgeActionButton(BridgeAction.SHOW_STATUS, onRunAction)
-        BridgeSecondaryButton("Go to Repo Workbench") { onGoTo(BridgeAppScreen.REPO) }
+        BridgeSecondaryButton("Go to Repo") { onGoTo(BridgeAppScreen.REPO) }
     }
 }
 
@@ -154,7 +99,7 @@ fun BridgeNextActionCard(
 ) {
     val action = bridgeRecommendedAction(treeUri, latestResult)
     BridgeSectionCard("Suggested Next Step") {
-        Text(action.title, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(action.title, color = Color.White)
         BridgeHintText(action.detail)
         when {
             action.pickFolder -> BridgePrimaryButton(action.buttonLabel, onPickFolder)
@@ -178,7 +123,7 @@ fun BridgeLatestResultCard(
         BridgePrimaryButton("Open Last Action Report", onOpenReport)
         BridgeSecondaryButton("Open Latest Log File", onOpenLog)
         BridgeSecondaryButton("Reload Saved Result File", onRefresh)
-        BridgeSecondaryButton("Go to Results Tools") { onGoTo(BridgeAppScreen.RESULTS) }
+        BridgeSecondaryButton("Go to Results") { onGoTo(BridgeAppScreen.RESULTS) }
     }
 }
 
@@ -200,7 +145,7 @@ fun BridgeRepoWorkbenchScreen(
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = null,
         curationState = curationState,
-        title = "Repo Workbench",
+        title = "Repo Actions",
         onRunAction = onRunAction,
         onTogglePin = onTogglePin,
         onHideAction = onHideAction,
@@ -277,7 +222,7 @@ fun BridgePatchRunnerScreen(
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = null,
         curationState = curationState,
-        title = "Patch Runner Actions",
+        title = "Patch Actions",
         onRunAction = onRunAction,
         onTogglePin = onTogglePin,
         onHideAction = onHideAction,
@@ -330,7 +275,7 @@ fun BridgeApkScreen(
         hasTermuxPermission = hasTermuxPermission,
         latestApkName = latestApkName,
         curationState = curationState,
-        title = "App Update Actions",
+        title = "Update Actions",
         onRunAction = onRunAction,
         onTogglePin = onTogglePin,
         onHideAction = onHideAction,
@@ -338,22 +283,22 @@ fun BridgeApkScreen(
     ) {
         BridgeApkFallback(onRunAction)
     }
-    BridgeSectionCard("Install Downloaded APK") {
+    BridgeSectionCard("Install Downloaded Update") {
         Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
-        BridgePrimaryButton("Open Android Installer for Newest APK", onInstall)
-        BridgeSecondaryButton("Open This App's Install Permission", onInstallSettings)
-        BridgeHintText("If Android says conflicting package, this APK was signed with a different key than the installed app. Uninstall AppLab Bridge once, install the APK from the kept Debug APK workflow, then future APKs from that same workflow should update normally.")
+        BridgePrimaryButton("Open Android Installer", onInstall)
+        BridgeSecondaryButton("Open Install Permission", onInstallSettings)
+        BridgeHintText("If Android says conflicting package, uninstall AppLab Bridge once, then install APKs from the kept Debug APK workflow.")
     }
 }
 
 @Composable
 private fun BridgeApkFallback(onRunAction: (BridgeAction) -> Unit) {
-    BridgeSectionCard("Check for App Update") {
+    BridgeSectionCard("Check for Update") {
         BridgeHintText("Uses Termux and GitHub CLI to inspect the latest successful Debug APK workflow artifact. This does not build an APK on the phone.")
         BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
     }
-    BridgeSectionCard("Download App Update") {
-        BridgeHintText("Downloads the newest GitHub APK artifact to Documents/AppLabBridge/apks. Use APKs from the single kept Debug APK workflow to avoid signing conflicts.")
+    BridgeSectionCard("Download Update") {
+        BridgeHintText("Downloads the newest GitHub APK artifact to Documents/AppLabBridge/apks.")
         BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
     }
 }
@@ -398,10 +343,10 @@ fun BridgeSetupScreen(
     BridgeSectionCard("Termux Permission") {
         BridgePrimaryButton("Request Termux Command Permission", onRequestTermuxPermission)
         BridgeSecondaryButton("Open Android Permissions for This App", onOpenSettings)
-        BridgeHintText("The app now asks for Termux RUN_COMMAND permission instead of silently waiting for a timeout. Some Android builds may still require opening app settings manually.")
+        BridgeHintText("The app asks for Termux RUN_COMMAND permission instead of silently waiting for a timeout.")
     }
     BridgeSectionCard("Backend Bootstrap / Repair") {
-        BridgeHintText("Use this when the app times out because bridge_v2.sh or helper files are missing or stale. The app asks Termux bash to install the live backend through stdin; the inspection copy is optional.")
+        BridgeHintText("Use this when the app times out because bridge_v2.sh or helper files are missing or stale.")
         BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
         BridgePrimaryButton("Bootstrap / Repair Termux Backend", onBootstrapBackend)
     }
