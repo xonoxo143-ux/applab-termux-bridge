@@ -34,6 +34,16 @@ source_helper() {
   fi
 }
 
+bounded_cmd() {
+  LIMIT_SECONDS="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$LIMIT_SECONDS" "$@"
+  else
+    "$@"
+  fi
+}
+
 source_helper repo_state.sh || repo_json_fields() { printf '{}'; }
 source_helper result_writer.sh || { write_result() { echo "Result writer missing" >&2; exit 1; }; run_report() { echo "Result writer missing" >&2; exit 1; }; }
 source_helper apk_actions.sh || true
@@ -72,6 +82,8 @@ case "$ACTION" in
     REPORT_FILE="$REPORTS_DIR/check_setup.txt"
     {
       echo "AppLab Termux Bridge setup check"
+      echo "Run: $RUN_ID"
+      echo "Started: $STARTED_AT"
       echo
       echo "Termux home: $HOME_DIR"
       echo "Projects dir: $PROJECTS_DIR"
@@ -79,17 +91,34 @@ case "$ACTION" in
       echo "Live dispatcher: $LIVE_DISPATCHER"
       echo "Lib dir: $LIB_DIR"
       echo
-      echo "Tools:"
-      command -v git || true
-      command -v gh || true
-      command -v python3 || true
-      command -v zip || true
+      echo "Live backend files:"
+      ls -l "$HOME_DIR/.termux/applab" 2>&1 || true
+      ls -l "$LIB_DIR" 2>&1 || true
       echo
-      echo "GitHub auth:"
-      gh auth status 2>&1 || true
+      echo "Tools:"
+      command -v git || echo "git missing"
+      command -v gh || echo "gh missing"
+      command -v python3 || echo "python3 missing"
+      command -v zip || echo "zip missing"
+      command -v timeout || echo "timeout missing; bounded checks may run unbounded"
+      echo
+      echo "GitHub auth status, bounded:"
+      if command -v gh >/dev/null 2>&1; then
+        bounded_cmd 8s gh auth status 2>&1 || echo "gh auth status unavailable, timed out, or returned nonzero"
+      else
+        echo "gh missing"
+      fi
+      echo
+      echo "Setup check reached result writer."
     } > "$REPORT_FILE" 2>&1
-    cat "$REPORT_FILE" > "$LOG_FILE"
-    write_result "success" "Setup checked" "Setup report written." 0 "$REPORT_FILE" "If app-launched actions still time out, check Android permission to run Termux commands and confirm allow-external-apps=true."
+    CODE=$?
+    cat "$REPORT_FILE" > "$LOG_FILE" 2>/dev/null || true
+    if [ "$CODE" -eq 0 ]; then
+      write_result "success" "Setup checked" "Setup report written." "$CODE" "$REPORT_FILE" "Backend setup completed. If app still times out, inspect android_app_bridge.log and Termux pending-intent result logs."
+    else
+      write_result "failed" "Setup check failed" "Exit $CODE. See report/log." "$CODE" "$REPORT_FILE" "Setup report failed before completion. Inspect the report for the last completed section."
+    fi
+    exit "$CODE"
     ;;
 
   update_dispatcher)
