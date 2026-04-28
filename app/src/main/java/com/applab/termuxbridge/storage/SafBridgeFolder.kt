@@ -67,6 +67,17 @@ class SafBridgeFolder(private val context: Context) {
         return true
     }
 
+    fun appendText(uri: Uri, folderName: String, fileName: String, text: String): Boolean {
+        val existing = readText(uri, listOf(folderName, fileName)).orEmpty()
+        val next = buildString {
+            append(existing)
+            if (existing.isNotEmpty() && !existing.endsWith("\n")) append('\n')
+            append(text)
+            if (!text.endsWith("\n")) append('\n')
+        }
+        return writeText(uri, folderName, fileName, next)
+    }
+
     fun find(uri: Uri, path: List<String>): DocumentFile? {
         var current = bridgeRoot(uri) ?: return null
         path.forEach { part -> current = current.findFile(part) ?: return null }
@@ -88,7 +99,7 @@ class SafBridgeFolder(private val context: Context) {
         private const val PREFS = "applab_bridge_prefs"
         private const val KEY_TREE_URI = "tree_uri"
         private const val BRIDGE_DIR_NAME = "AppLabBridge"
-        val REQUIRED_DIRS = listOf("config", "inbox", "logs", "results", "apks", "save_codes", "debug_zips", "patches", "reports")
+        val REQUIRED_DIRS = listOf("config", "inbox", "logs", "results", "apks", "save_codes", "debug_zips", "patches", "reports", "bootstrap")
     }
 }
 
