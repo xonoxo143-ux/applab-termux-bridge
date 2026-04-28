@@ -78,16 +78,24 @@ fun BridgeRegistryGroupOrFallback(
     latestResult: BridgeResult,
     hasTermuxPermission: Boolean,
     latestApkName: String?,
+    curationState: ActionCurationState = ActionCurationState(),
+    showHiddenActions: Boolean = false,
     title: String = groupName,
     fallbackReason: String = "Backend action registry is missing, incomplete, or has no actions for this group. Showing fixed fallback controls.",
     onRunAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit = {},
+    onHideAction: (String) -> Unit = {},
+    onUnhideAction: (String) -> Unit = {},
     fallbackContent: @Composable () -> Unit
 ) {
     var filter by remember(groupName) { mutableStateOf(ActionAvailabilityFilter.ACTIVE) }
     val actions = (registryState as? BackendActionRegistryState.Loaded)
         ?.registry
         ?.actions
-        ?.filter { action -> action.group == groupName && action.visibleByDefault && !action.advanced && !action.parked }
+        ?.filter { action ->
+            action.group == groupName && action.visibleByDefault && !action.advanced && !action.parked &&
+                (showHiddenActions || !curationState.isHidden(action.id))
+        }
         ?.sortedBy { it.sort }
         .orEmpty()
 
@@ -121,7 +129,16 @@ fun BridgeRegistryGroupOrFallback(
             BridgeHintText("No actions match the current filter.")
         } else {
             visibleActions.forEach { (descriptor, relevance) ->
-                BridgeRegistryActionRow(descriptor, relevance, onRunAction)
+                BridgeRegistryActionRow(
+                    descriptor = descriptor,
+                    relevance = relevance,
+                    curationState = curationState,
+                    showHiddenAction = showHiddenActions,
+                    onRunAction = onRunAction,
+                    onTogglePin = onTogglePin,
+                    onHideAction = onHideAction,
+                    onUnhideAction = onUnhideAction
+                )
             }
         }
     }
@@ -131,9 +148,16 @@ fun BridgeRegistryGroupOrFallback(
 fun BridgeRegistryActionRow(
     descriptor: BackendActionDescriptor,
     relevance: ActionRelevance,
-    onRunAction: (BridgeAction) -> Unit
+    curationState: ActionCurationState = ActionCurationState(),
+    showHiddenAction: Boolean = false,
+    onRunAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit = {},
+    onHideAction: (String) -> Unit = {},
+    onUnhideAction: (String) -> Unit = {}
 ) {
     val builtIn = BridgeAction.fromId(descriptor.id)
+    val pinned = curationState.isPinned(descriptor.id)
+    val hidden = curationState.isHidden(descriptor.id)
     val rowColor = when (relevance.availability) {
         ActionAvailability.READY -> Color(0xFF080D12)
         ActionAvailability.WARNING -> Color(0xFF1F1707)
@@ -151,6 +175,13 @@ fun BridgeRegistryActionRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(descriptor.label, color = Color.White, fontWeight = FontWeight.Bold)
                 Text("${descriptor.id} · ${descriptor.risk} · ${actionAvailabilityLabel(relevance)}", color = registryRiskColor(descriptor, relevance), fontFamily = FontFamily.Monospace)
+                if (pinned || hidden) {
+                    Text(
+                        listOfNotNull(if (pinned) "pinned" else null, if (hidden) "hidden" else null).joinToString(" · "),
+                        color = Color(0xFFFFD166),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
             if (builtIn != null) {
                 Button(
@@ -169,6 +200,20 @@ fun BridgeRegistryActionRow(
         }
         if (descriptor.description.isNotBlank()) {
             Text(descriptor.description, color = Color(0xFF9AA4B2))
+        }
+        if (curationState.customizeMode || showHiddenAction) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (pinned) Color(0xFF344055) else Color(0xFF1B6BFF)),
+                    onClick = { onTogglePin(descriptor.id) }
+                ) { Text(if (pinned) "Unpin" else "Pin") }
+                Button(
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (hidden) Color(0xFF1B6BFF) else Color(0xFF344055)),
+                    onClick = { if (hidden) onUnhideAction(descriptor.id) else onHideAction(descriptor.id) }
+                ) { Text(if (hidden) "Unhide" else "Hide") }
+            }
         }
     }
 }
