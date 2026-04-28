@@ -31,12 +31,14 @@ import com.applab.termuxbridge.bridge.BridgeResult
 
 private enum class CatalogProfile(val label: String) {
     QUICK("Quick"),
+    PINNED("Pinned"),
     SETUP("Setup"),
     REPO("Repo"),
     PATCH("Patch"),
     APK("APK"),
     RESULTS("Results"),
     ADVANCED("Advanced"),
+    HIDDEN("Hidden"),
     ALL("All")
 }
 
@@ -46,14 +48,20 @@ fun BridgeActionCatalogScreen(
     latestResult: BridgeResult,
     hasTermuxPermission: Boolean,
     latestApkName: String?,
+    curationState: ActionCurationState,
     onReloadRegistry: () -> Unit,
-    onRunBuiltInAction: (BridgeAction) -> Unit
+    onRunBuiltInAction: (BridgeAction) -> Unit,
+    onSetCustomizeMode: (Boolean) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit,
+    onResetLayout: () -> Unit
 ) {
     var selectedProfile by remember { mutableStateOf(CatalogProfile.QUICK) }
     var availabilityFilter by remember { mutableStateOf(ActionAvailabilityFilter.ACTIVE) }
 
     BridgeSectionCard("Action Catalog") {
-        BridgeHintText("Backend-published actions are grouped here. Use Active for normal work; use Blocked or All when troubleshooting.")
+        BridgeHintText("Backend-published actions are grouped here. Use Customize Actions to pin or hide actions.")
         BridgeSecondaryButton("Reload Action Registry", onReloadRegistry)
         BridgeActionButton(BridgeAction.LIST_ACTIONS, onRunBuiltInAction)
     }
@@ -76,61 +84,54 @@ fun BridgeActionCatalogScreen(
                 generatedAt = registry.generatedAt,
                 actionCount = registry.actions.size
             )
+            BridgeCurationControlCard(curationState, onSetCustomizeMode, onResetLayout)
             BridgeCatalogProfilePicker(selectedProfile) { selectedProfile = it }
             BridgeSectionCard("Availability") {
                 BridgeAvailabilityFilterPicker(availabilityFilter) { availabilityFilter = it }
             }
 
-            val normalActions = registry.actions.filter { it.visibleByDefault && !it.advanced && !it.parked }
+            val visibleNormalActions = registry.actions.filter { it.visibleByDefault && !it.advanced && !it.parked && !curationState.isHidden(it.id) }
+            val hiddenActions = registry.actions.filter { curationState.isHidden(it.id) }
             val advancedActions = registry.actions.filter { !it.visibleByDefault || it.advanced || it.parked }
-            val quickActions = quickActionIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id } }
+            val quickActions = quickActionIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id && !curationState.isHidden(it.id) } }
+            val pinnedActions = curationState.pinnedIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id } }
 
             when (selectedProfile) {
-                CatalogProfile.QUICK -> BridgeCompactActionGroup(
-                    group = "Quick Actions",
-                    actions = quickActions,
-                    expandedByDefault = true,
-                    latestResult = latestResult,
-                    hasTermuxPermission = hasTermuxPermission,
-                    latestApkName = latestApkName,
-                    availabilityFilter = availabilityFilter,
-                    onRunBuiltInAction = onRunBuiltInAction
-                )
-                CatalogProfile.SETUP -> BridgeCatalogGroups(listOf("Setup"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
-                CatalogProfile.REPO -> BridgeCatalogGroups(listOf("Repo Workbench"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
-                CatalogProfile.PATCH -> BridgeCatalogGroups(listOf("Patch Runner"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
-                CatalogProfile.APK -> BridgeCatalogGroups(listOf("Build / APK"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
-                CatalogProfile.RESULTS -> BridgeCatalogGroups(listOf("Results"), normalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, onRunBuiltInAction)
-                CatalogProfile.ADVANCED -> BridgeCompactActionGroup(
-                    group = "Advanced / Parked Actions",
-                    actions = advancedActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }),
-                    expandedByDefault = true,
-                    latestResult = latestResult,
-                    hasTermuxPermission = hasTermuxPermission,
-                    latestApkName = latestApkName,
-                    availabilityFilter = ActionAvailabilityFilter.ALL,
-                    onRunBuiltInAction = onRunBuiltInAction,
-                    hideAdvancedParked = false
-                )
+                CatalogProfile.QUICK -> BridgeCompactActionGroup("Quick Actions", quickActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.PINNED -> BridgeCompactActionGroup("Pinned Actions", pinnedActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false)
+                CatalogProfile.SETUP -> BridgeCatalogGroups(listOf("Setup"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.REPO -> BridgeCatalogGroups(listOf("Repo Workbench"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.PATCH -> BridgeCatalogGroups(listOf("Patch Runner"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.APK -> BridgeCatalogGroups(listOf("Build / APK"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.RESULTS -> BridgeCatalogGroups(listOf("Results"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
+                CatalogProfile.ADVANCED -> BridgeCompactActionGroup("Advanced / Parked Actions", advancedActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }), true, latestResult, hasTermuxPermission, latestApkName, ActionAvailabilityFilter.ALL, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false)
+                CatalogProfile.HIDDEN -> BridgeCompactActionGroup("Hidden Actions", hiddenActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }), true, latestResult, hasTermuxPermission, latestApkName, ActionAvailabilityFilter.ALL, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false, showHiddenAction = true)
                 CatalogProfile.ALL -> {
                     registry.groups.forEach { group ->
-                        val groupActions = normalActions.filter { it.group == group }.sortedBy { it.sort }
+                        val groupActions = visibleNormalActions.filter { it.group == group }.sortedBy { it.sort }
                         if (groupActions.isNotEmpty()) {
-                            BridgeCompactActionGroup(
-                                group = group,
-                                actions = groupActions,
-                                expandedByDefault = group == "Setup",
-                                latestResult = latestResult,
-                                hasTermuxPermission = hasTermuxPermission,
-                                latestApkName = latestApkName,
-                                availabilityFilter = availabilityFilter,
-                                onRunBuiltInAction = onRunBuiltInAction
-                            )
+                            BridgeCompactActionGroup(group, groupActions, group == "Setup", latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BridgeCurationControlCard(
+    curationState: ActionCurationState,
+    onSetCustomizeMode: (Boolean) -> Unit,
+    onResetLayout: () -> Unit
+) {
+    BridgeSectionCard("Customize Actions") {
+        Text("Pinned ${curationState.pinnedIds.size} · Hidden ${curationState.hiddenIds.size}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
+        BridgePrimaryButton(if (curationState.customizeMode) "Done Customizing" else "Customize Actions") {
+            onSetCustomizeMode(!curationState.customizeMode)
+        }
+        BridgeSecondaryButton("Reset Action Layout", onResetLayout)
+        BridgeHintText("Customize mode adds Pin/Hide controls to action rows. Hidden actions are still available from the Hidden profile.")
     }
 }
 
@@ -165,13 +166,9 @@ private fun BridgeCatalogProfilePicker(selected: CatalogProfile, onSelected: (Ca
                         modifier = Modifier.weight(1f).heightIn(min = 40.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color(0xFF1B6BFF) else Color(0xFF344055)),
                         onClick = { onSelected(profile) }
-                    ) {
-                        Text(profile.label)
-                    }
+                    ) { Text(profile.label) }
                 }
-                if (rowProfiles.size == 1) {
-                    Column(modifier = Modifier.weight(1f)) { }
-                }
+                if (rowProfiles.size == 1) Column(modifier = Modifier.weight(1f)) { }
             }
         }
     }
@@ -185,21 +182,16 @@ private fun BridgeCatalogGroups(
     hasTermuxPermission: Boolean,
     latestApkName: String?,
     availabilityFilter: ActionAvailabilityFilter,
-    onRunBuiltInAction: (BridgeAction) -> Unit
+    curationState: ActionCurationState,
+    onRunBuiltInAction: (BridgeAction) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit
 ) {
     groupNames.forEach { group ->
         val groupActions = actions.filter { it.group == group }.sortedBy { it.sort }
         if (groupActions.isNotEmpty()) {
-            BridgeCompactActionGroup(
-                group = group,
-                actions = groupActions,
-                expandedByDefault = true,
-                latestResult = latestResult,
-                hasTermuxPermission = hasTermuxPermission,
-                latestApkName = latestApkName,
-                availabilityFilter = availabilityFilter,
-                onRunBuiltInAction = onRunBuiltInAction
-            )
+            BridgeCompactActionGroup(group, groupActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
         } else {
             BridgeSectionCard(group) { BridgeHintText("No actions found for this group in the current registry.") }
         }
@@ -215,56 +207,42 @@ private fun BridgeCompactActionGroup(
     hasTermuxPermission: Boolean,
     latestApkName: String?,
     availabilityFilter: ActionAvailabilityFilter,
+    curationState: ActionCurationState,
     onRunBuiltInAction: (BridgeAction) -> Unit,
-    hideAdvancedParked: Boolean = true
+    onTogglePin: (String) -> Unit,
+    onHideAction: (String) -> Unit,
+    onUnhideAction: (String) -> Unit,
+    hideAdvancedParked: Boolean = true,
+    showHiddenAction: Boolean = false
 ) {
     var expanded by remember(group) { mutableStateOf(expandedByDefault) }
     val actionStates = actions.map { descriptor ->
-        descriptor to relevanceForAction(
-            descriptor = descriptor,
-            result = latestResult,
-            hasTermuxPermission = hasTermuxPermission,
-            latestApkName = latestApkName
-        )
+        descriptor to relevanceForAction(descriptor, latestResult, hasTermuxPermission, latestApkName)
     }.filter { (descriptor, relevance) ->
-        relevance.availability != ActionAvailability.HIDDEN || !hideAdvancedParked || descriptor.advanced || descriptor.parked
+        (relevance.availability != ActionAvailability.HIDDEN || !hideAdvancedParked || descriptor.advanced || descriptor.parked) &&
+            (showHiddenAction || !curationState.isHidden(descriptor.id))
     }
     val visibleActions = actionStates.filter { (_, relevance) -> actionVisibleForFilter(relevance, availabilityFilter) }
     val readyCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.READY }
     val warningCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.WARNING }
     val blockedCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.BLOCKED }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)),
-        shape = RoundedCornerShape(18.dp)
-    ) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)), shape = RoundedCornerShape(18.dp)) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(group, color = Color.White, fontWeight = FontWeight.Bold)
                     Text("ready $readyCount · warning $warningCount · blocked $blockedCount", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
                 }
-                OutlinedButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "Hide" else "Show", color = Color.White)
-                }
+                OutlinedButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide" else "Show", color = Color.White) }
             }
             if (expanded) {
-                if (visibleActions.isEmpty()) {
-                    BridgeHintText("No actions match the current filter.")
-                } else {
-                    visibleActions.forEach { (action, relevance) -> BridgeRegistryActionRow(action, relevance, onRunBuiltInAction) }
+                if (visibleActions.isEmpty()) BridgeHintText("No actions match the current filter.") else visibleActions.forEach { (action, relevance) ->
+                    BridgeRegistryActionRow(action, relevance, curationState, showHiddenAction, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
                 }
             }
         }
     }
 }
 
-private val quickActionIds = listOf(
-    "check_setup",
-    "list_actions",
-    "list_projects",
-    "show_active_repo",
-    "show_status",
-    "create_debug_zip"
-)
+private val quickActionIds = listOf("check_setup", "list_actions", "list_projects", "show_active_repo", "show_status", "create_debug_zip")
