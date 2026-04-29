@@ -88,11 +88,7 @@ fun AppLabBridgeApp() {
     }
 
     val termuxPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        statusText = if (granted) {
-            "Termux command permission granted."
-        } else {
-            "Termux command permission was not granted. Open this app's permissions and allow Run commands in Termux."
-        }
+        statusText = if (granted) "Termux command permission granted." else "Termux command permission was not granted. Open this app's permissions and allow Run commands in Termux."
         appLogger.log(treeUri, "permission.termux.result", "granted=$granted")
     }
 
@@ -111,11 +107,7 @@ fun AppLabBridgeApp() {
     }
 
     fun logRunResult(prefix: String, result: RunResult) {
-        appLogger.log(
-            treeUri,
-            prefix,
-            "started=${result.started} phase=${result.phase} path=${result.commandPath} args=${result.arguments.joinToString(",")} stdinBytes=${result.stdinBytes} termuxInstalled=${result.termuxInstalled} runPermission=${result.runCommandPermission} message=${result.message}"
-        )
+        appLogger.log(treeUri, prefix, "started=${result.started} phase=${result.phase} path=${result.commandPath} args=${result.arguments.joinToString(",")} stdinBytes=${result.stdinBytes} termuxInstalled=${result.termuxInstalled} runPermission=${result.runCommandPermission} message=${result.message}")
     }
 
     fun reloadRegistry() {
@@ -148,11 +140,7 @@ fun AppLabBridgeApp() {
         val runResult = termuxRunner.run(action)
         logRunResult("termux.launch", runResult)
         statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
-        if (runResult.started) {
-            startPolling(action, runResult.phase)
-        } else {
-            pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
-        }
+        if (runResult.started) startPolling(action, runResult.phase) else pendingCommand = BridgePendingCommand(action = action, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
     }
 
     fun runBackendBootstrap() {
@@ -176,11 +164,7 @@ fun AppLabBridgeApp() {
         val runResult = termuxRunner.runBootstrapInstaller(script.text)
         logRunResult("bootstrap.launch", runResult)
         statusText = "${runResult.phase.userLabel()}: ${runResult.message}"
-        if (runResult.started) {
-            startPolling(BridgeAction.CHECK_SETUP, runResult.phase)
-        } else {
-            pendingCommand = BridgePendingCommand(action = BridgeAction.CHECK_SETUP, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
-        }
+        if (runResult.started) startPolling(BridgeAction.CHECK_SETUP, runResult.phase) else pendingCommand = BridgePendingCommand(action = BridgeAction.CHECK_SETUP, previousRunId = latestResult.runId, phase = BridgeCommandPhase.LAUNCH_FAILED)
     }
 
     fun requestAction(action: BridgeAction) {
@@ -214,8 +198,13 @@ fun AppLabBridgeApp() {
             appLogger.log(treeUri, "repo.choose.failed", "choice=${choice.termuxPath}")
             return
         }
-        appLogger.log(treeUri, "repo.choose", "choice=${choice.termuxPath}")
-        executeAction(BridgeAction.SELECT_CONFIGURED_REPO)
+        val action = when (choice.name) {
+            "applab-termux-bridge" -> BridgeAction.SET_ACTIVE_BRIDGE
+            "libreseed-labs-android" -> BridgeAction.SET_ACTIVE_LIBRESEED
+            else -> BridgeAction.SELECT_CONFIGURED_REPO
+        }
+        appLogger.log(treeUri, "repo.choose", "choice=${choice.termuxPath} action=${action.id}")
+        executeAction(action)
     }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -276,14 +265,8 @@ fun AppLabBridgeApp() {
                     pendingCommand = expected.copy(phase = BridgeCommandPhase.RESULT_RECEIVED)
                     statusText = "Result received: ${result.title}"
                     appLogger.log(treeUri, "poll.result", "matched=true runId=${result.runId} action=${result.action} status=${result.status}")
-                    if (result.action == BridgeAction.LIST_ACTIONS.id) {
-                        registryState = registryReader.read(treeUri)
-                        appLogger.log(treeUri, "registry.reload.afterListActions", "state=${registryState::class.java.simpleName}")
-                    }
-                    if (result.action == BridgeAction.LIST_PROJECTS.id) {
-                        repoChoices = repoChoiceReader.readChoices(treeUri)
-                        appLogger.log(treeUri, "repo.choices.reload", "count=${repoChoices.size}")
-                    }
+                    if (result.action == BridgeAction.LIST_ACTIONS.id) registryState = registryReader.read(treeUri)
+                    if (result.action == BridgeAction.LIST_PROJECTS.id) repoChoices = repoChoiceReader.readChoices(treeUri)
                     if (!autoScannedAfterSetup && result.action == BridgeAction.CHECK_SETUP.id && result.status.equals("success", true)) {
                         autoScannedAfterSetup = true
                         delay(500)
@@ -327,110 +310,30 @@ fun AppLabBridgeApp() {
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                BridgeAppHeader(
-                    currentScreen = currentScreen,
-                    latestResult = latestResult,
-                    onScreenSelected = { currentScreen = it }
-                )
+                BridgeAppHeader(currentScreen = currentScreen, latestResult = latestResult, onScreenSelected = { currentScreen = it })
                 BridgeStatusPanel(statusText, treeUri, latestResult, pendingCommand)
                 pendingAction?.let { action ->
-                    BridgeConfirmActionCard(
-                        action = action,
-                        latestResult = latestResult,
-                        onConfirm = { executeAction(action) },
-                        onCancel = {
-                            pendingAction = null
-                            statusText = "Action cancelled."
-                            appLogger.log(treeUri, "action.cancel", "action=${action.id}")
-                        }
-                    )
+                    BridgeConfirmActionCard(action = action, latestResult = latestResult, onConfirm = { executeAction(action) }, onCancel = {
+                        pendingAction = null
+                        statusText = "Action cancelled."
+                        appLogger.log(treeUri, "action.cancel", "action=${action.id}")
+                    })
                 }
                 when (currentScreen) {
-                    BridgeAppScreen.HOME -> BridgeHomeScreen(
-                        treeUri = treeUri,
-                        latestResult = latestResult,
-                        registryState = registryState,
-                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        curationState = curationState,
-                        latestApkName = apkInstaller.latestApkName(treeUri),
-                        onPickFolder = { folderPicker.launch(null) },
-                        onRefresh = ::refreshResult,
-                        onRunAction = ::requestAction,
-                        onOpenReport = openReport,
-                        onOpenLog = openLog,
-                        onGoTo = { currentScreen = it },
-                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
-                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
-                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
-                    )
-                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(
-                        latestResult = latestResult,
-                        repoChoices = repoChoices,
-                        onRunAction = ::requestAction,
-                        onChooseRepo = ::chooseRepo,
-                        onGoTo = { currentScreen = it }
-                    )
-                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(
-                        registryState = registryState,
-                        latestResult = latestResult,
-                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        curationState = curationState,
-                        onRunAction = ::requestAction,
-                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
-                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
-                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }
-                    )
-                    BridgeAppScreen.APK -> BridgeApkScreen(
-                        registryState = registryState,
-                        latestResult = latestResult,
-                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        curationState = curationState,
-                        latestApkName = apkInstaller.latestApkName(treeUri),
-                        onRunAction = ::requestAction,
-                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
-                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
-                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) },
-                        onInstall = {
-                            appLogger.log(treeUri, "apk.install", "latest=${apkInstaller.latestApkName(treeUri)}")
-                            statusText = apkInstaller.installLatest(treeUri).message
-                        },
-                        onInstallSettings = { apkInstaller.openInstallSettings() }
-                    )
-                    BridgeAppScreen.RESULTS -> BridgeResultsScreen(
-                        result = latestResult,
-                        onRefresh = ::refreshResult,
-                        onOpenReport = openReport,
-                        onOpenLog = openLog,
-                        onOpenDebugZip = openDebugZip,
-                        onRunAction = ::requestAction
-                    )
-                    BridgeAppScreen.ACTION_CATALOG -> BridgeActionCatalogScreen(
-                        registryState = registryState,
-                        latestResult = latestResult,
-                        hasTermuxPermission = termuxRunner.hasRunCommandPermission(),
-                        latestApkName = apkInstaller.latestApkName(treeUri),
-                        curationState = curationState,
-                        onReloadRegistry = ::reloadRegistry,
-                        onRunBuiltInAction = ::requestAction,
-                        onSetCustomizeMode = { enabled -> updateCuration(curationStore.setCustomizeMode(enabled), "action.customize") },
-                        onTogglePin = { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) },
-                        onHideAction = { id -> updateCuration(curationStore.hide(id), "action.hidden", id) },
-                        onUnhideAction = { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) },
-                        onResetLayout = { updateCuration(curationStore.reset(), "action.layout.reset") }
-                    )
+                    BridgeAppScreen.HOME -> BridgeHomeScreen(treeUri, latestResult, registryState, termuxRunner.hasRunCommandPermission(), curationState, apkInstaller.latestApkName(treeUri), { folderPicker.launch(null) }, ::refreshResult, ::requestAction, openReport, openLog, { currentScreen = it }, { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) }, { id -> updateCuration(curationStore.hide(id), "action.hidden", id) }, { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) })
+                    BridgeAppScreen.REPO -> BridgeRepoWorkbenchScreen(latestResult, repoChoices, ::requestAction, ::chooseRepo) { currentScreen = it }
+                    BridgeAppScreen.PATCH -> BridgePatchRunnerScreen(registryState, latestResult, termuxRunner.hasRunCommandPermission(), curationState, ::requestAction, { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) }, { id -> updateCuration(curationStore.hide(id), "action.hidden", id) }, { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) })
+                    BridgeAppScreen.APK -> BridgeApkScreen(registryState, latestResult, termuxRunner.hasRunCommandPermission(), curationState, apkInstaller.latestApkName(treeUri), ::requestAction, { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) }, { id -> updateCuration(curationStore.hide(id), "action.hidden", id) }, { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }, {
+                        appLogger.log(treeUri, "apk.install", "latest=${apkInstaller.latestApkName(treeUri)}")
+                        statusText = apkInstaller.installLatest(treeUri).message
+                    }, { apkInstaller.openInstallSettings() })
+                    BridgeAppScreen.RESULTS -> BridgeResultsScreen(latestResult, ::refreshResult, openReport, openLog, openDebugZip, ::requestAction)
+                    BridgeAppScreen.ACTION_CATALOG -> BridgeActionCatalogScreen(registryState, latestResult, termuxRunner.hasRunCommandPermission(), apkInstaller.latestApkName(treeUri), curationState, ::reloadRegistry, ::requestAction, { enabled -> updateCuration(curationStore.setCustomizeMode(enabled), "action.customize") }, { id -> updateCuration(curationStore.togglePin(id), "action.pin.toggle", id) }, { id -> updateCuration(curationStore.hide(id), "action.hidden", id) }, { id -> updateCuration(curationStore.unhide(id), "action.unhidden", id) }, { updateCuration(curationStore.reset(), "action.layout.reset") })
                     BridgeAppScreen.ADVANCED -> BridgeAdvancedScreen(onRunAction = ::requestAction)
-                    BridgeAppScreen.SETUP -> BridgeSetupScreen(
-                        onPickFolder = { folderPicker.launch(null) },
-                        onRefresh = ::refreshResult,
-                        onRunAction = ::requestAction,
-                        onOpenSettings = { openAppSettings(context) },
-                        onRequestTermuxPermission = { requestTermuxPermission("manual setup button") },
-                        onClipboard = {
-                            appLogger.log(treeUri, "clipboard.save", "requested=true")
-                            statusText = clipboardBridge.writeClipboardSave(treeUri).message
-                        },
-                        onBootstrapBackend = ::runBackendBootstrap
-                    )
+                    BridgeAppScreen.SETUP -> BridgeSetupScreen({ folderPicker.launch(null) }, ::refreshResult, ::requestAction, { openAppSettings(context) }, { requestTermuxPermission("manual setup button") }, {
+                        appLogger.log(treeUri, "clipboard.save", "requested=true")
+                        statusText = clipboardBridge.writeClipboardSave(treeUri).message
+                    }, ::runBackendBootstrap)
                 }
             }
         }
@@ -438,8 +341,6 @@ fun AppLabBridgeApp() {
 }
 
 private fun openAppSettings(context: Context) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = Uri.parse("package:${context.packageName}")
-    }
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:${context.packageName}") }
     context.startActivity(intent)
 }
