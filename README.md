@@ -9,41 +9,47 @@ This app is a project cockpit, not a terminal emulator and not an IDE.
 It sends approved action IDs to a Termux dispatcher script:
 
 ```text
-Android GUI -> Termux RUN_COMMAND -> ~/.termux/applab/bridge.sh <action> -> JSON/report/log files
+Android GUI -> Termux RUN_COMMAND -> ~/.termux/applab/bridge_v2.sh <action> -> JSON/report/log files
 ```
 
 The Android app owns:
 
-- dashboard buttons
+- workflow screens
 - Storage Access Framework folder permission
-- clipboard-to-file save handoff
-- result JSON/report/log display
+- repo chooser UI
+- clipboard-to-file handoff
+- result/report/log display
 - APK install handoff
 
 Termux owns:
 
-- git / gh / curl / jq / rg / python / zip work
+- git / gh / python / zip work
+- repo actions
 - script execution
 - durable logs and reports
 
-## V1 architecture
+## UI model
 
-- Native Android
-- Kotlin
-- Jetpack Compose
-- Single Activity
-- Gradle Android project
-- GitHub Actions debug APK artifact
-- Termux `RUN_COMMAND` dispatcher
-- File-based result reader
-- No arbitrary command box
+Normal screens are workflow-first:
+
+```text
+Home -> status, current repo, next step, pinned actions, last result
+Setup -> access, backend, recovery
+Repo -> current repo, choose repo, repo actions
+Actions -> compact action runner and pin/hide management
+Results -> last result, reports/logs, debug bundle
+Updates -> check, download, install update
+Advanced -> raw repo, backend, debug, and parked tools
+```
+
+Advanced is where low-level or rarely used tools belong.
 
 ## Required Termux setup
 
-Install the AppLab Termux script pack so this path exists:
+The live backend path is:
 
 ```bash
-~/.termux/applab/bridge.sh
+~/.termux/applab/bridge_v2.sh
 ```
 
 Termux must also allow external command calls:
@@ -72,7 +78,7 @@ The app asks you to pick this folder with Android's folder picker. Termux should
 
 ## Build
 
-GitHub Actions builds a debug APK artifact on every push to `main`.
+GitHub Actions builds a debug APK artifact on pushes to `main` unless the workflow is skipped.
 
 Local build if Gradle 8.13+ and Android SDK are available:
 
