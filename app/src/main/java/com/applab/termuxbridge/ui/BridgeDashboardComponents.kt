@@ -35,7 +35,7 @@ fun BridgeDashboardReadinessStrip(
 ) {
     val backendReady = registryState is BackendActionRegistryState.Loaded ||
         (latestResult.action == BridgeAction.CHECK_SETUP.id && latestResult.status.equals("success", true))
-    BridgeSectionCard("Readiness") {
+    BridgeSectionCard("Status") {
         BridgeDashboardStatusChipRow(
             items = listOf(
                 DashboardChip("Folder", if (treeUri == null) "Missing" else "Ready", treeUri != null),
@@ -45,7 +45,7 @@ fun BridgeDashboardReadinessStrip(
         )
         when {
             treeUri == null -> BridgePrimaryButton("Choose Folder", onPickFolder)
-            !hasTermuxPermission -> BridgePrimaryButton("Open Setup", { onGoTo(BridgeAppScreen.SETUP) })
+            !hasTermuxPermission -> BridgePrimaryButton("Fix Setup", { onGoTo(BridgeAppScreen.SETUP) })
             !backendReady -> BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
         }
     }
@@ -58,8 +58,8 @@ fun BridgeDashboardRepoSummary(
     onGoTo: (BridgeAppScreen) -> Unit
 ) {
     val hasRepo = latestResult.repoName != null || latestResult.branch != null
-    BridgeSectionCard("Repo") {
-        BridgeStatusLine("Repo", latestResult.repoName ?: "unknown", latestResult.repoName != null)
+    BridgeSectionCard("Current Repo") {
+        BridgeStatusLine("Repo", latestResult.repoName ?: "none selected", latestResult.repoName != null)
         BridgeStatusLine("Branch", latestResult.branch ?: "unknown", latestResult.branch != null)
         BridgeStatusLine("State", latestResult.stateLabel, latestResult.dirty == false)
         BridgeStatusLine("Patch", latestResult.patchLabel, latestResult.hasPatchFile == true)
@@ -68,15 +68,15 @@ fun BridgeDashboardRepoSummary(
                 modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
                 onClick = { onGoTo(BridgeAppScreen.REPO) }
-            ) { Text(if (hasRepo) "Open Repo" else "Select Repo") }
+            ) { Text("Choose Repo") }
             Button(
                 modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
-                onClick = { onRunAction(if (hasRepo) BridgeAction.SHOW_STATUS else BridgeAction.LIST_PROJECTS) }
-            ) { Text(if (hasRepo) "Status" else "Scan") }
+                onClick = { onRunAction(if (hasRepo) BridgeAction.CHECK_REPO else BridgeAction.LIST_PROJECTS) }
+            ) { Text(if (hasRepo) "Check" else "Find Repos") }
         }
         if (!hasRepo) {
-            BridgeHintText("No active repo is selected yet. Scan projects or open Repo to choose one before checking status.")
+            BridgeHintText("Choose Repo opens the repo screen. Find Repos scans Termux ~/projects first.")
         }
     }
 }
@@ -116,25 +116,25 @@ fun BridgeDashboardPinnedActions(
     val registry = (registryState as? BackendActionRegistryState.Loaded)?.registry
     val pinnedActions = curationState.pinnedIds.mapNotNull { id ->
         registry?.actions?.firstOrNull { it.id == id && !curationState.isHidden(it.id) }
-    }.take(5)
-    BridgeSectionCard("Pinned") {
+    }.take(4)
+    BridgeSectionCard("Pinned Actions") {
         when {
             registry == null -> {
-                BridgeHintText("No backend action registry loaded yet.")
-                BridgeSecondaryButton("Open Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+                BridgeHintText("No backend action list loaded yet.")
+                BridgeSecondaryButton("Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
             }
             curationState.pinnedIds.isEmpty() -> {
-                BridgeHintText("No pinned actions yet.")
-                BridgeSecondaryButton("Manage Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+                BridgeHintText("No pinned actions yet. Pin actions from the Actions screen.")
+                BridgeSecondaryButton("Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
             }
             pinnedActions.isEmpty() -> {
-                BridgeHintText("Pinned actions are hidden or missing from the latest registry.")
-                BridgeSecondaryButton("Manage Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
+                BridgeHintText("Pinned actions are hidden or missing from the latest backend list.")
+                BridgeSecondaryButton("Actions") { onGoTo(BridgeAppScreen.ACTION_CATALOG) }
             }
             else -> {
                 pinnedActions.forEach { action ->
                     val relevance = relevanceForAction(action, latestResult, hasTermuxPermission, latestApkName)
-                    BridgeCompactDashboardActionRow(action.label, action.id, relevance) {
+                    BridgeCompactDashboardActionRow(action.label, relevance) {
                         BridgeAction.fromId(action.id)?.let(onRunAction)
                     }
                 }
@@ -203,7 +203,6 @@ private fun BridgeDashboardStatusChipRow(items: List<DashboardChip>) {
 @Composable
 private fun BridgeCompactDashboardActionRow(
     label: String,
-    id: String,
     relevance: ActionRelevance,
     onRun: () -> Unit
 ) {
@@ -216,7 +215,7 @@ private fun BridgeCompactDashboardActionRow(
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(label, color = Color.White, fontWeight = FontWeight.Bold)
-            Text("$id · ${actionAvailabilityLabel(relevance)}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            Text(actionAvailabilityLabel(relevance), color = if (relevance.canRun) Color(0xFF5CE38A) else Color(0xFFFFD166), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
         }
         Button(
             modifier = Modifier.heightIn(min = 38.dp),
