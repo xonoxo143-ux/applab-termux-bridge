@@ -60,20 +60,24 @@ fun BridgeRepoWorkbenchScreen(
     }
 
     BridgeSectionCard("Choose Repo") {
-        BridgeHintText("Find repos scans Termux ~/projects. Tap a repo below to make it the active repo.")
+        BridgeHintText("Find Repos scans Termux ~/projects and your GitHub repos. Local repos are selected; online repos are cloned then selected.")
         BridgePrimaryButton("Find Repos", { onRunAction(BridgeAction.LIST_PROJECTS) })
         if (repoChoices.isEmpty()) {
-            BridgeHintText("No scanned repos loaded yet. Tap Find Repos first.")
+            BridgeHintText("No repos loaded yet. Tap Find Repos first.")
         } else {
-            repoChoices.take(5).forEach { choice ->
+            repoChoices.take(6).forEach { choice ->
+                val suffix = when (choice.source) {
+                    BridgeRepoChoiceSource.LOCAL -> "local"
+                    BridgeRepoChoiceSource.GITHUB -> "online"
+                }
                 Button(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (choice.source == BridgeRepoChoiceSource.LOCAL) Color(0xFF344055) else Color(0xFF1B6BFF)),
                     onClick = { onChooseRepo(choice) }
-                ) { Text(choice.name) }
+                ) { Text("${choice.displayName} · $suffix") }
             }
-            if (repoChoices.size > 5) {
-                BridgeHintText("Showing first 5 repos. Refine repo folders later if this gets crowded.")
+            if (repoChoices.size > 6) {
+                BridgeHintText("Showing first 6 repos. More filtering can be added later if this gets crowded.")
             }
         }
     }
