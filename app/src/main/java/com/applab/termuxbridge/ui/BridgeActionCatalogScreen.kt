@@ -1,5 +1,6 @@
 package com.applab.termuxbridge.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,17 +27,16 @@ import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
 import com.applab.termuxbridge.bridge.BridgeResult
 
-private enum class CatalogProfile(val label: String) {
-    QUICK("Quick"),
-    PINNED("Pinned"),
-    SETUP("Setup"),
-    REPO("Repo"),
-    PATCH("Patch"),
-    APK("APK"),
-    RESULTS("Results"),
-    ADVANCED("Advanced"),
-    HIDDEN("Hidden"),
-    ALL("All")
+private enum class ActionRunnerView(val label: String, val detail: String) {
+    QUICK("Quick", "Common actions for setup, repo, and results."),
+    PINNED("Pinned", "Your pinned actions."),
+    REPO("Repo", "Repo inspection and maintenance actions."),
+    PATCH("Patch", "Patch, stage, commit, and push actions."),
+    UPDATES("Updates", "App update checks and downloads."),
+    RESULTS("Results", "Reports, logs, and debug bundle actions."),
+    SETUP("Setup", "Bridge setup and backend repair actions."),
+    ADVANCED("Advanced", "Raw, parked, or rarely used backend actions."),
+    HIDDEN("Hidden", "Actions hidden from normal views.")
 }
 
 @Composable
@@ -57,192 +54,262 @@ fun BridgeActionCatalogScreen(
     onUnhideAction: (String) -> Unit,
     onResetLayout: () -> Unit
 ) {
-    var selectedProfile by remember { mutableStateOf(CatalogProfile.QUICK) }
-    var availabilityFilter by remember { mutableStateOf(ActionAvailabilityFilter.ACTIVE) }
-
-    BridgeSectionCard("Action Catalog") {
-        BridgeHintText("Backend-published actions are grouped here. Use Customize Actions to pin or hide actions.")
-        BridgeSecondaryButton("Reload Action Registry", onReloadRegistry)
-        BridgeActionButton(BridgeAction.LIST_ACTIONS, onRunBuiltInAction)
-    }
+    var selectedView by remember { mutableStateOf(ActionRunnerView.QUICK) }
 
     when (registryState) {
-        BackendActionRegistryState.MissingFolder -> BridgeSectionCard("Registry Missing") {
-            BridgeHintText("Choose the shared bridge folder before loading backend actions.")
-        }
-        BackendActionRegistryState.MissingRegistry -> BridgeSectionCard("Registry Missing") {
-            BridgeHintText("No config/actions.json found yet. Run List Backend Actions after bootstrapping the backend.")
-        }
-        is BackendActionRegistryState.ParseError -> BridgeSectionCard("Registry Parse Error") {
-            BridgeHintText(registryState.message)
-        }
+        BackendActionRegistryState.MissingFolder -> BridgeActionsUnavailable(
+            title = "Actions unavailable",
+            detail = "Choose the shared bridge folder before loading backend actions.",
+            onReloadRegistry = onReloadRegistry,
+            onRunBuiltInAction = onRunBuiltInAction
+        )
+        BackendActionRegistryState.MissingRegistry -> BridgeActionsUnavailable(
+            title = "Actions unavailable",
+            detail = "No backend action list is loaded yet. Refresh backend actions after setup or backend repair.",
+            onReloadRegistry = onReloadRegistry,
+            onRunBuiltInAction = onRunBuiltInAction
+        )
+        is BackendActionRegistryState.ParseError -> BridgeActionsUnavailable(
+            title = "Actions unavailable",
+            detail = "Backend action list could not be read: ${registryState.message}",
+            onReloadRegistry = onReloadRegistry,
+            onRunBuiltInAction = onRunBuiltInAction
+        )
         is BackendActionRegistryState.Loaded -> {
             val registry = registryState.registry
-            BridgeCatalogStatusCard(
-                schema = registry.schemaVersion,
-                commit = registry.backendCommit,
-                generatedAt = registry.generatedAt,
-                actionCount = registry.actions.size
+            val actionsForView = actionsForRunnerView(registry.actions, selectedView, curationState)
+            val visibleRows = actionsForView.take(6)
+            val hiddenCount = actionsForView.size - visibleRows.size
+
+            BridgeActionViewCard(
+                selectedView = selectedView,
+                onPrevious = { selectedView = previousActionRunnerView(selectedView) },
+                onNext = { selectedView = nextActionRunnerView(selectedView) }
             )
-            BridgeCurationControlCard(curationState, onSetCustomizeMode, onResetLayout)
-            BridgeCatalogProfilePicker(selectedProfile) { selectedProfile = it }
-            BridgeSectionCard("Availability") {
-                BridgeAvailabilityFilterPicker(availabilityFilter) { availabilityFilter = it }
-            }
 
-            val visibleNormalActions = registry.actions.filter { it.visibleByDefault && !it.advanced && !it.parked && !curationState.isHidden(it.id) }
-            val hiddenActions = registry.actions.filter { curationState.isHidden(it.id) }
-            val advancedActions = registry.actions.filter { !it.visibleByDefault || it.advanced || it.parked }
-            val quickActions = quickActionIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id && !curationState.isHidden(it.id) } }
-            val pinnedActions = curationState.pinnedIds.mapNotNull { id -> registry.actions.firstOrNull { it.id == id } }
-
-            when (selectedProfile) {
-                CatalogProfile.QUICK -> BridgeCompactActionGroup("Quick Actions", quickActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.PINNED -> BridgeCompactActionGroup("Pinned Actions", pinnedActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false)
-                CatalogProfile.SETUP -> BridgeCatalogGroups(listOf("Setup"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.REPO -> BridgeCatalogGroups(listOf("Repo Workbench"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.PATCH -> BridgeCatalogGroups(listOf("Patch Runner"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.APK -> BridgeCatalogGroups(listOf("Build / APK"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.RESULTS -> BridgeCatalogGroups(listOf("Results"), visibleNormalActions, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                CatalogProfile.ADVANCED -> BridgeCompactActionGroup("Advanced / Parked Actions", advancedActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }), true, latestResult, hasTermuxPermission, latestApkName, ActionAvailabilityFilter.ALL, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false)
-                CatalogProfile.HIDDEN -> BridgeCompactActionGroup("Hidden Actions", hiddenActions.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort }), true, latestResult, hasTermuxPermission, latestApkName, ActionAvailabilityFilter.ALL, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction, hideAdvancedParked = false, showHiddenAction = true)
-                CatalogProfile.ALL -> {
-                    registry.groups.forEach { group ->
-                        val groupActions = visibleNormalActions.filter { it.group == group }.sortedBy { it.sort }
-                        if (groupActions.isNotEmpty()) {
-                            BridgeCompactActionGroup(group, groupActions, group == "Setup", latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                        }
+            BridgeSectionCard("Run Actions") {
+                if (visibleRows.isEmpty()) {
+                    BridgeHintText(emptyActionsText(selectedView))
+                } else {
+                    visibleRows.forEach { descriptor ->
+                        val relevance = relevanceForAction(descriptor, latestResult, hasTermuxPermission, latestApkName)
+                        BridgeActionRunnerRow(
+                            descriptor = descriptor,
+                            relevance = relevance,
+                            curationState = curationState,
+                            showManagement = curationState.customizeMode || selectedView == ActionRunnerView.HIDDEN,
+                            onRunBuiltInAction = onRunBuiltInAction,
+                            onTogglePin = onTogglePin,
+                            onHideAction = onHideAction,
+                            onUnhideAction = onUnhideAction
+                        )
+                    }
+                    if (hiddenCount > 0) {
+                        BridgeHintText("Showing first ${visibleRows.size}. Use a narrower view or Advanced if this list gets crowded.")
                     }
                 }
             }
+
+            BridgeActionManageCard(
+                registryActionCount = registry.actions.size,
+                pinnedCount = curationState.pinnedIds.size,
+                hiddenCount = curationState.hiddenIds.size,
+                customizeMode = curationState.customizeMode,
+                onReloadRegistry = onReloadRegistry,
+                onRefreshBackendActions = { onRunBuiltInAction(BridgeAction.LIST_ACTIONS) },
+                onSetCustomizeMode = onSetCustomizeMode,
+                onResetLayout = onResetLayout
+            )
         }
     }
 }
 
 @Composable
-private fun BridgeCurationControlCard(
-    curationState: ActionCurationState,
-    onSetCustomizeMode: (Boolean) -> Unit,
-    onResetLayout: () -> Unit
+private fun BridgeActionViewCard(
+    selectedView: ActionRunnerView,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
 ) {
-    BridgeSectionCard("Customize Actions") {
-        Text("Pinned ${curationState.pinnedIds.size} · Hidden ${curationState.hiddenIds.size}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
-        BridgePrimaryButton(if (curationState.customizeMode) "Done Customizing" else "Customize Actions") {
-            onSetCustomizeMode(!curationState.customizeMode)
+    BridgeSectionCard("Action View") {
+        Text(selectedView.label, color = Color.White, fontWeight = FontWeight.Bold)
+        BridgeHintText(selectedView.detail)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onPrevious
+            ) { Text("Previous") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = onNext
+            ) { Text("Next") }
         }
-        BridgeSecondaryButton("Reset Action Layout", onResetLayout)
-        BridgeHintText("Customize mode adds Pin/Hide controls to action rows. Hidden actions are still available from the Hidden profile.")
+        Text("Order: Quick → Pinned → Repo → Patch → Updates → Results → Setup → Advanced → Hidden", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
     }
 }
 
 @Composable
-private fun BridgeCatalogStatusCard(schema: Int, commit: String, generatedAt: String, actionCount: Int) {
-    BridgeSectionCard("Registry Status") {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BridgeMiniStatus("Schema", schema.toString(), schema == 1)
-            BridgeMiniStatus("Actions", actionCount.toString(), actionCount > 0)
-            BridgeMiniStatus("Commit", commit.ifBlank { "unknown" }, commit.isNotBlank())
-        }
-        Text("Generated: ${generatedAt.ifBlank { "unknown" }}", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable
-private fun BridgeMiniStatus(label: String, value: String, ok: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color(0xFF9AA4B2))
-        Text(value, color = if (ok) Color(0xFF5CE38A) else Color(0xFFFFD166), fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable
-private fun BridgeCatalogProfilePicker(selected: CatalogProfile, onSelected: (CatalogProfile) -> Unit) {
-    BridgeSectionCard("View") {
-        CatalogProfile.entries.chunked(2).forEach { rowProfiles ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowProfiles.forEach { profile ->
-                    val isSelected = profile == selected
-                    Button(
-                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color(0xFF1B6BFF) else Color(0xFF344055)),
-                        onClick = { onSelected(profile) }
-                    ) { Text(profile.label) }
-                }
-                if (rowProfiles.size == 1) Column(modifier = Modifier.weight(1f)) { }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BridgeCatalogGroups(
-    groupNames: List<String>,
-    actions: List<BackendActionDescriptor>,
-    latestResult: BridgeResult,
-    hasTermuxPermission: Boolean,
-    latestApkName: String?,
-    availabilityFilter: ActionAvailabilityFilter,
+private fun BridgeActionRunnerRow(
+    descriptor: BackendActionDescriptor,
+    relevance: ActionRelevance,
     curationState: ActionCurationState,
+    showManagement: Boolean,
     onRunBuiltInAction: (BridgeAction) -> Unit,
     onTogglePin: (String) -> Unit,
     onHideAction: (String) -> Unit,
     onUnhideAction: (String) -> Unit
 ) {
-    groupNames.forEach { group ->
-        val groupActions = actions.filter { it.group == group }.sortedBy { it.sort }
-        if (groupActions.isNotEmpty()) {
-            BridgeCompactActionGroup(group, groupActions, true, latestResult, hasTermuxPermission, latestApkName, availabilityFilter, curationState, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-        } else {
-            BridgeSectionCard(group) { BridgeHintText("No actions found for this group in the current registry.") }
+    val builtIn = BridgeAction.fromId(descriptor.id)
+    val pinned = curationState.isPinned(descriptor.id)
+    val hidden = curationState.isHidden(descriptor.id)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF080D12), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(descriptor.label, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(actionAvailabilityLabel(relevance), color = actionRunnerStateColor(relevance), fontFamily = FontFamily.Monospace)
+                if (pinned || hidden) {
+                    Text(
+                        listOfNotNull(if (pinned) "pinned" else null, if (hidden) "hidden" else null).joinToString(" · "),
+                        color = Color(0xFFFFD166),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+            Button(
+                modifier = Modifier.heightIn(min = 40.dp),
+                enabled = relevance.canRun && builtIn != null && !hidden,
+                colors = ButtonDefaults.buttonColors(containerColor = bridgeButtonColor(relevance.tone)),
+                onClick = { builtIn?.let(onRunBuiltInAction) }
+            ) { Text(if (relevance.canRun && !hidden) "Run" else "Blocked") }
+        }
+        if (relevance.availability == ActionAvailability.BLOCKED || relevance.availability == ActionAvailability.WARNING) {
+            Text(relevance.reason, color = actionRunnerStateColor(relevance), fontFamily = FontFamily.Monospace)
+        }
+        if (showManagement) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (pinned) Color(0xFF344055) else Color(0xFF1B6BFF)),
+                    onClick = { onTogglePin(descriptor.id) }
+                ) { Text(if (pinned) "Unpin" else "Pin") }
+                Button(
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (hidden) Color(0xFF1B6BFF) else Color(0xFF344055)),
+                    onClick = { if (hidden) onUnhideAction(descriptor.id) else onHideAction(descriptor.id) }
+                ) { Text(if (hidden) "Unhide" else "Hide") }
+            }
         }
     }
 }
 
 @Composable
-private fun BridgeCompactActionGroup(
-    group: String,
-    actions: List<BackendActionDescriptor>,
-    expandedByDefault: Boolean,
-    latestResult: BridgeResult,
-    hasTermuxPermission: Boolean,
-    latestApkName: String?,
-    availabilityFilter: ActionAvailabilityFilter,
-    curationState: ActionCurationState,
-    onRunBuiltInAction: (BridgeAction) -> Unit,
-    onTogglePin: (String) -> Unit,
-    onHideAction: (String) -> Unit,
-    onUnhideAction: (String) -> Unit,
-    hideAdvancedParked: Boolean = true,
-    showHiddenAction: Boolean = false
+private fun BridgeActionManageCard(
+    registryActionCount: Int,
+    pinnedCount: Int,
+    hiddenCount: Int,
+    customizeMode: Boolean,
+    onReloadRegistry: () -> Unit,
+    onRefreshBackendActions: () -> Unit,
+    onSetCustomizeMode: (Boolean) -> Unit,
+    onResetLayout: () -> Unit
 ) {
-    var expanded by remember(group) { mutableStateOf(expandedByDefault) }
-    val actionStates = actions.map { descriptor ->
-        descriptor to relevanceForAction(descriptor, latestResult, hasTermuxPermission, latestApkName)
-    }.filter { (descriptor, relevance) ->
-        (relevance.availability != ActionAvailability.HIDDEN || !hideAdvancedParked || descriptor.advanced || descriptor.parked) &&
-            (showHiddenAction || !curationState.isHidden(descriptor.id))
-    }
-    val visibleActions = actionStates.filter { (_, relevance) -> actionVisibleForFilter(relevance, availabilityFilter) }
-    val readyCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.READY }
-    val warningCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.WARNING }
-    val blockedCount = actionStates.count { (_, relevance) -> relevance.availability == ActionAvailability.BLOCKED }
-
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)), shape = RoundedCornerShape(18.dp)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(group, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("ready $readyCount · warning $warningCount · blocked $blockedCount", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
-                }
-                OutlinedButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide" else "Show", color = Color.White) }
-            }
-            if (expanded) {
-                if (visibleActions.isEmpty()) BridgeHintText("No actions match the current filter.") else visibleActions.forEach { (action, relevance) ->
-                    BridgeRegistryActionRow(action, relevance, curationState, showHiddenAction, onRunBuiltInAction, onTogglePin, onHideAction, onUnhideAction)
-                }
-            }
+    BridgeSectionCard("Manage") {
+        Text("Actions $registryActionCount · Pinned $pinnedCount · Hidden $hiddenCount", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = if (customizeMode) Color(0xFF344055) else Color(0xFF1B6BFF)),
+                onClick = { onSetCustomizeMode(!customizeMode) }
+            ) { Text(if (customizeMode) "Done" else "Customize") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onReloadRegistry
+            ) { Text("Reload") }
         }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onRefreshBackendActions
+            ) { Text("Refresh") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onResetLayout
+            ) { Text("Reset") }
+        }
+        BridgeHintText("Customize shows Pin/Hide controls. Refresh asks Termux to rewrite the backend action list; Reload only rereads the saved list.")
     }
 }
 
-private val quickActionIds = listOf("check_setup", "list_actions", "list_projects", "show_active_repo", "show_status", "create_debug_zip")
+@Composable
+private fun BridgeActionsUnavailable(
+    title: String,
+    detail: String,
+    onReloadRegistry: () -> Unit,
+    onRunBuiltInAction: (BridgeAction) -> Unit
+) {
+    BridgeSectionCard(title) {
+        BridgeHintText(detail)
+        BridgePrimaryButton("Refresh Backend Actions") { onRunBuiltInAction(BridgeAction.LIST_ACTIONS) }
+        BridgeSecondaryButton("Reload Saved Actions", onReloadRegistry)
+    }
+}
+
+private fun actionsForRunnerView(
+    actions: List<BackendActionDescriptor>,
+    selectedView: ActionRunnerView,
+    curationState: ActionCurationState
+): List<BackendActionDescriptor> {
+    val normal = actions.filter { it.visibleByDefault && !it.advanced && !it.parked && !curationState.isHidden(it.id) }
+    return when (selectedView) {
+        ActionRunnerView.QUICK -> quickActionIds.mapNotNull { id -> actions.firstOrNull { it.id == id && !curationState.isHidden(it.id) } }
+        ActionRunnerView.PINNED -> curationState.pinnedIds.mapNotNull { id -> actions.firstOrNull { it.id == id && !curationState.isHidden(it.id) } }
+        ActionRunnerView.REPO -> normal.filter { it.group == "Repo Workbench" }
+        ActionRunnerView.PATCH -> normal.filter { it.group == "Patch Runner" }
+        ActionRunnerView.UPDATES -> normal.filter { it.group == "Build / APK" }
+        ActionRunnerView.RESULTS -> normal.filter { it.group == "Results" }
+        ActionRunnerView.SETUP -> normal.filter { it.group == "Setup" }
+        ActionRunnerView.ADVANCED -> actions.filter { !it.visibleByDefault || it.advanced || it.parked }.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort })
+        ActionRunnerView.HIDDEN -> actions.filter { curationState.isHidden(it.id) }.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort })
+    }.sortedBy { it.sort }
+}
+
+private fun emptyActionsText(view: ActionRunnerView): String {
+    return when (view) {
+        ActionRunnerView.PINNED -> "No pinned actions yet. Use Customize to pin actions you want on Home and Actions."
+        ActionRunnerView.HIDDEN -> "No hidden actions."
+        else -> "No actions available for this view. Refresh backend actions or check setup."
+    }
+}
+
+private fun previousActionRunnerView(current: ActionRunnerView): ActionRunnerView {
+    val entries = ActionRunnerView.entries
+    val index = entries.indexOf(current)
+    return entries[(index - 1 + entries.size) % entries.size]
+}
+
+private fun nextActionRunnerView(current: ActionRunnerView): ActionRunnerView {
+    val entries = ActionRunnerView.entries
+    val index = entries.indexOf(current)
+    return entries[(index + 1) % entries.size]
+}
+
+private fun actionRunnerStateColor(relevance: ActionRelevance): Color {
+    return when (relevance.availability) {
+        ActionAvailability.READY -> Color(0xFF5CE38A)
+        ActionAvailability.WARNING -> Color(0xFFFFD166)
+        ActionAvailability.BLOCKED -> Color(0xFFFF6B6B)
+        ActionAvailability.HIDDEN -> Color(0xFF9AA4B2)
+    }
+}
+
+private val quickActionIds = listOf("check_setup", "list_projects", "check_repo", "list_changed_files", "create_debug_zip")
