@@ -198,12 +198,13 @@ fun AppLabBridgeApp() {
             appLogger.log(treeUri, "repo.choose.failed", "choice=${choice.termuxPath}")
             return
         }
-        val action = when (choice.name) {
-            "applab-termux-bridge" -> BridgeAction.SET_ACTIVE_BRIDGE
-            "libreseed-labs-android" -> BridgeAction.SET_ACTIVE_LIBRESEED
+        val action = when {
+            choice.source == BridgeRepoChoiceSource.GITHUB -> BridgeAction.SELECT_CONFIGURED_REPO
+            choice.name == "applab-termux-bridge" -> BridgeAction.SET_ACTIVE_BRIDGE
+            choice.name == "libreseed-labs-android" -> BridgeAction.SET_ACTIVE_LIBRESEED
             else -> BridgeAction.SELECT_CONFIGURED_REPO
         }
-        appLogger.log(treeUri, "repo.choose", "choice=${choice.termuxPath} action=${action.id}")
+        appLogger.log(treeUri, "repo.choose", "choice=${choice.termuxPath} source=${choice.source} action=${action.id}")
         executeAction(action)
     }
 
