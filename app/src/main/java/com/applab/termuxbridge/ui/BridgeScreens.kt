@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.applab.termuxbridge.actions.BackendActionRegistryState
 import com.applab.termuxbridge.bridge.BridgeAction
@@ -150,17 +151,41 @@ fun BridgeApkScreen(
     onInstall: () -> Unit,
     onInstallSettings: () -> Unit
 ) {
-    BridgeRegistryGroupOrFallback(registryState, "Build / APK", latestResult, hasTermuxPermission, latestApkName, curationState, title = "Update Actions", onRunAction = onRunAction, onTogglePin = onTogglePin, onHideAction = onHideAction, onUnhideAction = onUnhideAction) {
-        BridgeSectionCard("Update Actions") {
-            BridgeActionButton(BridgeAction.CHECK_LATEST_APK, onRunAction)
-            BridgeActionButton(BridgeAction.DOWNLOAD_LATEST_APK, onRunAction, tone = BridgeActionTone.WARNING)
+    BridgeSectionCard("Latest Build") {
+        BridgeHintText("Check GitHub for the latest signed debug APK, then download it to the shared bridge folder.")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = { onRunAction(BridgeAction.CHECK_LATEST_APK) }
+            ) { Text("Check") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB86814)),
+                onClick = { onRunAction(BridgeAction.DOWNLOAD_LATEST_APK) }
+            ) { Text("Download") }
         }
     }
-    BridgeSectionCard("Install Downloaded Update") {
-        Text(text = "Newest APK in shared folder: ${latestApkName ?: "none found"}", color = Color(0xFF9AA4B2))
-        BridgePrimaryButton("Open Android Installer", onInstall)
-        BridgeSecondaryButton("Open Install Permission", onInstallSettings)
-        BridgeHintText("If Android says conflicting package, uninstall AppLab Bridge once, then install APKs from the kept Debug APK workflow.")
+
+    BridgeSectionCard("Downloaded Update") {
+        Text(text = latestApkName ?: "No downloaded APK found", color = if (latestApkName == null) Color(0xFFFFD166) else Color(0xFF5CE38A), fontFamily = FontFamily.Monospace)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                enabled = latestApkName != null,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = onInstall
+            ) { Text("Install") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onInstallSettings
+            ) { Text("Permission") }
+        }
+    }
+
+    BridgeSectionCard("Install Help") {
+        BridgeHintText("Use APKs from the kept Debug APK workflow. If Android says conflicting package, uninstall AppLab Bridge once, then install the downloaded update.")
     }
 }
 
@@ -173,16 +198,42 @@ fun BridgeResultsScreen(
     onOpenDebugZip: () -> Unit,
     onRunAction: (BridgeAction) -> Unit
 ) {
-    BridgeSectionCard("Saved Result File") {
-        BridgeResultBlock(result)
-        BridgePrimaryButton("Open Last Action Report", onOpenReport)
-        BridgeSecondaryButton("Open Latest Log File", onOpenLog)
-        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
+    BridgeSectionCard("Last Result") {
+        Text("${result.status.uppercase()} · ${result.action.ifBlank { "none" }}", color = bridgeStatusColor(result.status), fontFamily = FontFamily.Monospace)
+        Text(result.title, color = Color.White)
+        BridgeHintText(result.summary)
+        BridgeSecondaryButton("Reload", onRefresh)
     }
+
+    BridgeSectionCard("Reports / Logs") {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = onOpenReport
+            ) { Text("Report") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onOpenLog
+            ) { Text("Log") }
+        }
+    }
+
     BridgeSectionCard("Debug Bundle") {
         BridgeHintText("Create a zip of reports, logs, config, and result files. APK files are excluded.")
-        BridgeActionButton(BridgeAction.CREATE_DEBUG_ZIP, onRunAction)
-        BridgeSecondaryButton("Open Latest Debug Zip", onOpenDebugZip)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = { onRunAction(BridgeAction.CREATE_DEBUG_ZIP) }
+            ) { Text("Create") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onOpenDebugZip
+            ) { Text("Open") }
+        }
     }
 }
 
@@ -196,27 +247,53 @@ fun BridgeSetupScreen(
     onClipboard: () -> Unit,
     onBootstrapBackend: () -> Unit
 ) {
-    BridgeSectionCard("Shared Bridge Folder") {
-        BridgePrimaryButton("Choose / Switch Shared Bridge Folder", onPickFolder)
-        BridgeSecondaryButton("Reload Saved Result File", onRefresh)
-        BridgeHintText("On first launch the app asks for this folder automatically. This button stays here only for manually switching folders later. Pick Documents or AppLabBridge.")
+    BridgeSectionCard("Access") {
+        BridgeHintText("Use these when Android cannot read the shared folder or Termux cannot run commands.")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = onPickFolder
+            ) { Text("Folder") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = onRequestTermuxPermission
+            ) { Text("Termux") }
+        }
+        BridgeSecondaryButton("App Settings", onOpenSettings)
     }
-    BridgeSectionCard("Termux Permission") {
-        BridgePrimaryButton("Request Termux Command Permission", onRequestTermuxPermission)
-        BridgeSecondaryButton("Open Android Permissions for This App", onOpenSettings)
-        BridgeHintText("The app asks for Termux RUN_COMMAND permission instead of silently waiting for a timeout.")
+
+    BridgeSectionCard("Backend") {
+        BridgeHintText("Check or repair the Termux backend when actions timeout or reports stop updating.")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B6BFF)),
+                onClick = { onRunAction(BridgeAction.CHECK_SETUP) }
+            ) { Text("Check") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB86814)),
+                onClick = onBootstrapBackend
+            ) { Text("Repair") }
+        }
+        BridgeSecondaryButton("Update Backend", { onRunAction(BridgeAction.UPDATE_DISPATCHER) })
     }
-    BridgeSectionCard("Backend Bootstrap / Repair") {
-        BridgeHintText("Use this when the app times out because bridge_v2.sh or helper files are missing or stale.")
-        BridgeActionButton(BridgeAction.CHECK_SETUP, onRunAction)
-        BridgePrimaryButton("Bootstrap / Repair Termux Backend", onBootstrapBackend)
-    }
-    BridgeSectionCard("Termux Backend From GitHub") {
-        BridgeActionButton(BridgeAction.UPDATE_DISPATCHER, onRunAction, tone = BridgeActionTone.WARNING)
-        BridgeHintText("Termux needs storage access, allow-external-apps=true, GitHub auth, and Android permission for this app to run Termux commands.")
-    }
-    BridgeSectionCard("Inbox") {
-        BridgeSecondaryButton("Save Clipboard Text to Inbox", onClipboard)
-        BridgeHintText("This writes clipboard text into the shared bridge folder for later backend workflows. It does not run Termux.")
+
+    BridgeSectionCard("Recovery") {
+        BridgeHintText("Use these when you need to reload the latest saved state or pass clipboard text into the shared bridge folder.")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onRefresh
+            ) { Text("Reload") }
+            Button(
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344055)),
+                onClick = onClipboard
+            ) { Text("Clipboard") }
+        }
     }
 }
