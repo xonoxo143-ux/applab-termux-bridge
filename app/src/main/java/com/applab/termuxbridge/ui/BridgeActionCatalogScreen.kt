@@ -35,7 +35,6 @@ private enum class ActionRunnerView(val label: String, val detail: String) {
     UPDATES("Updates", "App update checks and downloads."),
     RESULTS("Results", "Reports, logs, and debug bundle actions."),
     SETUP("Setup", "Bridge setup and backend repair actions."),
-    ADVANCED("Advanced", "Raw, parked, or rarely used backend actions."),
     HIDDEN("Hidden", "Actions hidden from normal views.")
 }
 
@@ -105,7 +104,7 @@ fun BridgeActionCatalogScreen(
                         )
                     }
                     if (hiddenCount > 0) {
-                        BridgeHintText("Showing first ${visibleRows.size}. Use a narrower view or Advanced if this list gets crowded.")
+                        BridgeHintText("Showing first ${visibleRows.size}. Use a narrower view if this list gets crowded.")
                     }
                 }
             }
@@ -145,7 +144,7 @@ private fun BridgeActionViewCard(
                 onClick = onNext
             ) { Text("Next") }
         }
-        Text("Order: Quick → Pinned → Repo → Patch → Updates → Results → Setup → Advanced → Hidden", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
+        Text("Order: Quick → Pinned → Repo → Patch → Updates → Results → Setup → Hidden", color = Color(0xFF9AA4B2), fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -278,7 +277,6 @@ private fun actionsForRunnerView(
         ActionRunnerView.UPDATES -> normal.filter { it.group == "Build / APK" }
         ActionRunnerView.RESULTS -> normal.filter { it.group == "Results" }
         ActionRunnerView.SETUP -> normal.filter { it.group == "Setup" }
-        ActionRunnerView.ADVANCED -> actions.filter { !it.visibleByDefault || it.advanced || it.parked }.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort })
         ActionRunnerView.HIDDEN -> actions.filter { curationState.isHidden(it.id) }.sortedWith(compareBy<BackendActionDescriptor> { it.group }.thenBy { it.sort })
     }.sortedBy { it.sort }
 }
