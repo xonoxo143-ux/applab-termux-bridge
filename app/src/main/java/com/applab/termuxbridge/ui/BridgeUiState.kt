@@ -36,66 +36,67 @@ data class BridgeRecommendedAction(
 fun bridgeRecommendedAction(treeUri: Uri?, result: BridgeResult): BridgeRecommendedAction {
     if (treeUri == null) {
         return BridgeRecommendedAction(
-            title = "Choose the shared bridge folder",
-            detail = "The app needs a shared bridge folder before it can read Termux reports, logs, APKs, or patch files.",
-            buttonLabel = "Choose Shared Bridge Folder",
+            title = "Choose the shared folder",
+            detail = "The app needs folder access before it can read reports, logs, updates, or patch files.",
+            buttonLabel = "Choose Folder",
             pickFolder = true
         )
     }
     if (!result.isLoaded) {
         return BridgeRecommendedAction(
-            title = "Run the setup check",
-            detail = "No saved result file has been loaded yet. Start by asking Termux to write a setup report.",
-            buttonLabel = BridgeAction.CHECK_SETUP.label,
+            title = "Check setup",
+            detail = "No saved result is loaded yet. Ask Termux to write a setup report.",
+            buttonLabel = "Check Setup",
             bridgeAction = BridgeAction.CHECK_SETUP
         )
     }
     if (result.status.equals("failed", true)) {
         return BridgeRecommendedAction(
-            title = "Inspect the failure",
-            detail = result.diagnosticHint ?: "The last action failed. Open the report before running more actions.",
-            buttonLabel = "Open Last Action Report",
+            title = "Read the failure report",
+            detail = result.diagnosticHint ?: "The last action failed. Read the report before running more actions.",
+            buttonLabel = "Report",
             openReport = true,
             tone = BridgeActionTone.WARNING
         )
     }
     if (result.action == "download_latest_apk") {
-        return BridgeRecommendedAction("Install the downloaded update", "The latest APK should now be in the shared bridge folder.", "Open Updates", screen = BridgeAppScreen.APK)
+        return BridgeRecommendedAction("Install update", "The latest APK should be in the shared bridge folder.", "Updates", screen = BridgeAppScreen.APK)
     }
     if (result.action == "list_actions") {
-        return BridgeRecommendedAction("Open Actions", "The backend action registry was written. Reload Actions to view it.", "Open Actions", screen = BridgeAppScreen.ACTION_CATALOG)
+        return BridgeRecommendedAction("Open Actions", "The backend action list was refreshed.", "Actions", screen = BridgeAppScreen.ACTION_CATALOG)
     }
     if (result.action == "update_dispatcher") {
-        return BridgeRecommendedAction("Verify the dispatcher", "The backend dispatcher was updated. Run the setup check before other actions.", BridgeAction.CHECK_SETUP.label, BridgeAction.CHECK_SETUP)
+        return BridgeRecommendedAction("Check setup", "The backend was updated. Check setup before other actions.", "Check", BridgeAction.CHECK_SETUP)
     }
     if ((result.stagedFiles ?: 0) > 0) {
         return BridgeRecommendedAction("Commit staged changes", "There are staged files ready to commit.", BridgeAction.COMMIT_NO_APK.label, BridgeAction.COMMIT_NO_APK, tone = BridgeActionTone.WARNING)
     }
     if (result.ahead != null && result.ahead > 0 && result.dirty == false) {
-        return BridgeRecommendedAction("Push current branch", "The selected repo has local commits ahead of upstream.", BridgeAction.PUSH_CURRENT.label, BridgeAction.PUSH_CURRENT, tone = BridgeActionTone.WARNING)
+        return BridgeRecommendedAction("Push branch", "The selected repo has local commits ahead of upstream.", BridgeAction.PUSH_CURRENT.label, BridgeAction.PUSH_CURRENT, tone = BridgeActionTone.WARNING)
     }
-    if (result.dirty == true && result.action == "show_status") {
-        return BridgeRecommendedAction("Review the diff", "The selected repo has changed files. Review before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
+    if (result.dirty == true && (result.action == "show_status" || result.action == "check_repo")) {
+        return BridgeRecommendedAction("View changes", "The selected repo has changed files. Review them before staging.", "Changes", BridgeAction.LIST_CHANGED_FILES)
     }
-    if (result.dirty == false && result.action == "show_status") {
+    if (result.dirty == false && (result.action == "show_status" || result.action == "check_repo")) {
         return if (result.hasPatchFile == true) {
-            BridgeRecommendedAction("Ready to run patch", "The repo is clean and patches/patch.sh is available.", "Open Patch", screen = BridgeAppScreen.PATCH)
+            BridgeRecommendedAction("Ready for patch", "The repo is clean and patches/patch.sh is available.", "Patch", screen = BridgeAppScreen.PATCH)
         } else {
-            BridgeRecommendedAction("Repo is clean", "Pull current branch, place a patch script, or switch workflows.", BridgeAction.PULL_CURRENT.label, BridgeAction.PULL_CURRENT)
+            BridgeRecommendedAction("Repo is clean", "Update the repo, place a patch script, or choose another workflow.", "Update", BridgeAction.PULL_CURRENT)
         }
     }
     return when (result.action) {
-        "check_setup" -> BridgeRecommendedAction("Choose or check a repo", "Setup passed. Select a repo, scan projects, or check the current selection.", "Open Repo", screen = BridgeAppScreen.REPO)
-        "set_active_bridge", "set_active_libreseed", "show_active_repo", "clone_bridge", "clone_libreseed" -> BridgeRecommendedAction("Refresh repo status", "The selected repo changed or was checked. Pull fresh git status next.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
-        "check_latest_apk" -> BridgeRecommendedAction("Download latest app build", "A successful app build is available if the report found a workflow run.", BridgeAction.DOWNLOAD_LATEST_APK.label, BridgeAction.DOWNLOAD_LATEST_APK, tone = BridgeActionTone.WARNING)
-        "pull_current", "pull_staging", "checkout_staging", "fetch_repo" -> BridgeRecommendedAction("Review changed files", "Repo state changed. Check whether anything changed before patching or publishing.", BridgeAction.LIST_CHANGED_FILES.label, BridgeAction.LIST_CHANGED_FILES)
-        "run_patch_script" -> BridgeRecommendedAction("Review patch result", "A patch ran. Review changed files and diff before staging.", BridgeAction.SHOW_DIFF_SUMMARY.label, BridgeAction.SHOW_DIFF_SUMMARY)
-        "list_changed_files", "show_diff_summary", "show_full_diff" -> BridgeRecommendedAction("Open Patch / Publish", "If the diff is correct, stage and commit from the guarded workflow screen.", "Open Patch", screen = BridgeAppScreen.PATCH, tone = BridgeActionTone.WARNING)
+        "check_setup" -> BridgeRecommendedAction("Choose a repo", "Setup passed. Choose a repo or scan Termux projects first.", "Repo", screen = BridgeAppScreen.REPO)
+        "list_projects" -> BridgeRecommendedAction("Choose a repo", "Repos were scanned. Open Repo and tap the repo you want active.", "Repo", screen = BridgeAppScreen.REPO)
+        "select_configured_repo", "set_active_bridge", "set_active_libreseed", "show_active_repo", "clone_bridge", "clone_libreseed" -> BridgeRecommendedAction("Check repo", "The selected repo changed. Check its current state next.", "Check", BridgeAction.CHECK_REPO)
+        "check_latest_apk" -> BridgeRecommendedAction("Download update", "A successful app build is available if the report found a workflow run.", "Download", BridgeAction.DOWNLOAD_LATEST_APK, tone = BridgeActionTone.WARNING)
+        "pull_current", "pull_staging", "checkout_staging", "fetch_repo" -> BridgeRecommendedAction("View changes", "Repo state changed. Review files before patching or publishing.", "Changes", BridgeAction.LIST_CHANGED_FILES)
+        "run_patch_script" -> BridgeRecommendedAction("Review patch", "A patch ran. Review changed files before staging.", "Changes", BridgeAction.LIST_CHANGED_FILES)
+        "list_changed_files", "show_diff_summary", "show_full_diff" -> BridgeRecommendedAction("Open Patch", "If the changes are correct, stage and commit from Patch.", "Patch", screen = BridgeAppScreen.PATCH, tone = BridgeActionTone.WARNING)
         "stage_all" -> BridgeRecommendedAction("Commit staged changes", "Files were staged. Commit with [no apk] unless this change should build an APK.", BridgeAction.COMMIT_NO_APK.label, BridgeAction.COMMIT_NO_APK, tone = BridgeActionTone.WARNING)
-        "commit_no_apk" -> BridgeRecommendedAction("Push current branch", "A commit was created. Push it when ready.", BridgeAction.PUSH_CURRENT.label, BridgeAction.PUSH_CURRENT, tone = BridgeActionTone.WARNING)
-        "push_current" -> BridgeRecommendedAction("Refresh status", "Push completed. Refresh the selected repo status.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
-        "create_debug_zip" -> BridgeRecommendedAction("Open debug bundle", "A debug zip should now be available from the Results screen.", "Open Results", screen = BridgeAppScreen.RESULTS)
-        else -> BridgeRecommendedAction("Refresh status", "Start by checking the selected repo state.", BridgeAction.SHOW_STATUS.label, BridgeAction.SHOW_STATUS)
+        "commit_no_apk" -> BridgeRecommendedAction("Push branch", "A commit was created. Push it when ready.", BridgeAction.PUSH_CURRENT.label, BridgeAction.PUSH_CURRENT, tone = BridgeActionTone.WARNING)
+        "push_current" -> BridgeRecommendedAction("Check repo", "Push completed. Check the selected repo again.", "Check", BridgeAction.CHECK_REPO)
+        "create_debug_zip" -> BridgeRecommendedAction("Open debug bundle", "A debug zip should now be available from Results.", "Results", screen = BridgeAppScreen.RESULTS)
+        else -> BridgeRecommendedAction("Check repo", "Start by checking the selected repo state.", "Check", BridgeAction.CHECK_REPO)
     }
 }
 
@@ -116,7 +117,7 @@ fun bridgeRequiresConfirmation(action: BridgeAction): Boolean {
 
 fun bridgeActionRiskText(action: BridgeAction): String {
     return when (action) {
-        BridgeAction.UPDATE_DISPATCHER -> "Updates the live Termux dispatcher from the bridge repo. This changes backend behavior without installing a new APK."
+        BridgeAction.UPDATE_DISPATCHER -> "Updates the live Termux backend from the bridge repo. This changes backend behavior without installing a new APK."
         BridgeAction.CLONE_BRIDGE -> "Clones or updates the bridge repo under ~/projects and selects it as the active repo."
         BridgeAction.CLONE_LIBRESEED -> "Clones or updates the LibreSeed repo under ~/projects and selects it as the active repo."
         BridgeAction.PULL_STAGING, BridgeAction.CHECKOUT_STAGING -> "Changes the selected repo branch. Use on a clean working tree."
@@ -125,13 +126,13 @@ fun bridgeActionRiskText(action: BridgeAction): String {
         BridgeAction.COMMIT_NO_APK -> "Creates a local commit. The backend appends [no apk] when needed."
         BridgeAction.PUSH_CURRENT -> "Pushes the current branch to GitHub. Confirm the branch and commit first."
         BridgeAction.DOWNLOAD_LATEST_APK -> "Downloads the latest GitHub APK artifact into the shared bridge folder. Install remains a separate Android confirmation."
-        BridgeAction.LIST_ACTIONS -> "Writes the backend action registry to config/actions.json and a readable report to reports/list_actions.txt."
+        BridgeAction.LIST_ACTIONS -> "Writes the backend action list to config/actions.json and a readable report to reports/list_actions.txt."
         else -> "This action changes repo or backend state. Confirm before running."
     }
 }
 
 fun bridgeRepoHeaderText(result: BridgeResult): String {
-    if (result.repoName == null && result.branch == null) return "No repo state loaded"
+    if (result.repoName == null && result.branch == null) return "No repo selected"
     return "${result.repoLabel} · ${result.stateLabel}"
 }
 
